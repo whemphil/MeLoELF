@@ -35,6 +35,8 @@ MeLoELF <- function(parent,
 ### Script (don't edit past here)
 #######################################################################
 
+setwd(mdir)
+
 #######################
 ## Load necessary non-base packages
 #######################
