@@ -1,9 +1,9 @@
 ### GENERAL INFO
-# 
+#
 # An R script for analyzing MeLoELF-seq data (Nanopore sequencing of oligomerized methylation reaction products)
 #
 ### COMMENTS
-# 
+#
 # Parsing/alignment by Wayne Hemphill
 # Processivity analysis by Ella Tommer
 #
@@ -28,7 +28,7 @@ MeLoELF <- function(parent,
                     target_fwd_auc=0.9,
                     save.file='align.RData',
                     load.file='align.RData',
-                    plot_title=NULL){              
+                    plot_title=NULL){
 
 
 #######################################################################
@@ -39,9 +39,9 @@ MeLoELF <- function(parent,
 ## Load necessary non-base packages
 #######################
 
-#library(stringr)
-#library(foreach)
-#library(doParallel)
+library(stringr)
+library(foreach)
+library(doParallel)
 
 #######################
 ## Create custom functions for later analysis
@@ -343,9 +343,9 @@ plot_duration_histogram <- function(durations, bins = 6, main = "Histogram of Du
 
 # Fragment mapping algorithm
 map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
-  
+
   test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per value
-  lengths.of.reads=length(test.0) 
+  lengths.of.reads=length(test.0)
   if((length(Cm)+length(Chm))!=length(C.key) | length(test.0)<min(read.length) | length(test.0)>max(read.length)){
     DATA='blank' # bypasses polymers outside desired length range
   } else {
@@ -362,10 +362,10 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     test.1=test.00
     testy.Chm=test.Chm
     testy.Cm=test.Cm
-    
+
     score.FWD=rep(0,times=length(test.1)+1-length(FWD)) # creates temporary vectors to hold the alignment scores for the FWD and REV sequences to the reference polymer
     score.REV=rep(0,times=length(test.1)+1-length(REV))
-    
+
     NN=round(length(test.0)/length(FWD)+0.4)+2 # sets the maximum number of fragments allowed to be mapped to the polymer
     FWD.mat=matrix(FWD,nrow=NN,ncol = length(FWD),byrow = T)
     REV.mat=matrix(REV,nrow=NN,ncol = length(REV),byrow = T)
@@ -379,11 +379,11 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
     FWD.refs=matrix(0,nrow=NN,ncol = length(FWD))
     REV.refs=matrix(0,nrow=NN,ncol = length(REV))
-    
+
     # loop for sliding reference sequence along read to calculate positional alignment scores
     for (i in 1:length(score.FWD)){
-      
-      score.FWD[i]=mean(FWD==test.1[i:(i+length(FWD)-1)])-mean(FWD!=test.1[i:(i+length(FWD)-1)] & "x"!=test.1[i:(i+length(FWD)-1)])*0.1 # quantifies the alignment quality of FWD reference fragment at various positions along the polymer 
+
+      score.FWD[i]=mean(FWD==test.1[i:(i+length(FWD)-1)])-mean(FWD!=test.1[i:(i+length(FWD)-1)] & "x"!=test.1[i:(i+length(FWD)-1)])*0.1 # quantifies the alignment quality of FWD reference fragment at various positions along the polymer
       score.REV[i]=mean(REV==test.1[i:(i+length(REV)-1)])-mean(REV!=test.1[i:(i+length(REV)-1)] & "x"!=test.1[i:(i+length(REV)-1)])*0.1
       # The following sections prioritize the perfect reference sequence matches in the polymer, recording them as the first mapped fragments
       if (score.FWD[i]==1){
@@ -406,26 +406,26 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
         test.Chm[i:(i+length(REV)-1)]=rep(NA,times=length(REV))
         test.Cm[i:(i+length(REV)-1)]=rep(NA,times=length(REV))
       }
-      
+
     }
-    
+
     # loop for performing additional reference alignments with scoring, until sufficient read coverage is achieved
     for (j in (COUNTER+1):NN){
-      
-      # terminates further alignment attempts when less than 10 bases in the polymer remain unmapped 
+
+      # terminates further alignment attempts when less than 10 bases in the polymer remain unmapped
       if(sum(test.1!="x")<10){
         break
       }
-      
+
       score.FWD=rep(0,times=length(test.1)+1-length(FWD))
       score.REV=rep(0,times=length(test.1)+1-length(FWD))
-      
+
       # scoring loop
       for (i in 1:length(score.FWD)){
         score.FWD[i]=mean(FWD==test.1[i:(i+length(FWD)-1)])-mean(FWD!=test.1[i:(i+length(FWD)-1)] & "x"!=test.1[i:(i+length(FWD)-1)])*0.1
         score.REV[i]=mean(REV==test.1[i:(i+length(REV)-1)])-mean(REV!=test.1[i:(i+length(REV)-1)] & "x"!=test.1[i:(i+length(REV)-1)])*0.1
       }
-      
+
       # Looks for the best-matching fragment alignments to the polymer, records that section as mapped, then repeats until the polymer is sufficiently mapped
       FWD.max=which.max(score.FWD)
       REV.max=which.max(score.REV)
@@ -453,15 +453,15 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
         test.Cm[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]=NA
         test.1[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]="x"
       }
-      
+
     }
-  
+
     # for each reference sequence mapped to the polymer, get indices of the fragment within the polymer
     REV.refs[REV.align!=REV.mat & REV.align!="N"]=-1*REV.refs[REV.align!=REV.mat & REV.align!="N"]
     REV.refs[REV.align=="x"]=0
     FWD.refs[FWD.align!=FWD.mat & FWD.align!="N"]=-1*FWD.refs[FWD.align!=FWD.mat & FWD.align!="N"]
     FWD.refs[FWD.align=="x"]=0
-    
+
     # calculate quality statistics for fragment alignments to read
     FEF.fwd=1-rowSums(FWD.align=='x')/length(FWD)
     FEF2.fwd=rowSums(FWD.align==FWD.mat)/rowSums(FWD.align!='x')
@@ -479,14 +479,14 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     id[FEF3.fwd!=1]='FWD'
     id[FEF3.rev!=1]='REV'
     quality=cbind(comp,match,id)
-    
+
     # save relevant data from read to subset of stable variable
     DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=abs(FWD.refs),'REV.I'=abs(REV.refs))
-    
+
   }
-  
+
   return(DATA)
-  
+
 }
 
 
@@ -496,18 +496,18 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
 
 if(crunch.too){
-  
+
   # time stamp for beginning of alignment job
   show(date())
-  
+
   raw=read.csv(file = paste0(mdir,seq.file),header = F) # load sequences from pre-processed file
   raw.2=as.matrix(read.csv(paste0(mdir,loc.file),header = F,sep = ";")[,]) # load CpG indices from pre-processed file
   raw.3=read.csv(paste0(mdir,call.file),header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
-  
+
   # convert input reference sequences into vector of bases
   FWD=str_extract_all(parent,boundary("character"))[[1]]
   REV=str_extract_all(target,boundary("character"))[[1]]
-  
+
   # load CpG indices, hydroxy-methyl scores, and methyl scores into alignable arrays
   Chm=str_split(raw.2[,1],',')
   Cm=str_split(raw.2[,2],',')
@@ -519,60 +519,60 @@ if(crunch.too){
     Chm[[i]]=cumsum(Chm[[i]]+1)
     Cm[[i]]=cumsum(Cm[[i]]+1)
   }
-  
+
   # create empty variables for data storage and indexing
   READS=0
   lengths.of.reads=rep(NA,times=nrow(raw))
-  
+
   # loop to perform parallelized alignments with scoring on a per-read basis
   registerDoParallel(detectCores())
   DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
-    
+
     map.fragments(read=raw[seq,1],Cm[[seq]],Chm[[seq]],C.key[[seq]],read.length=read.length,FWD=FWD,REV=REV)
-      
+
   }
   # get lengths of reads
   lengths.of.reads <- foreach(seq = 1:nrow(raw),.combine = c) %dopar% {
-    
+
     length(str_extract_all(raw[seq,1],boundary("character"))[[1]])
-    
+
   }
   # get fragment numbers
   READS <- foreach(seq = 1:nrow(raw),.combine = c) %dopar% {
-    
+
     round(length(str_extract_all(raw[seq,1],boundary("character"))[[1]])/length(FWD)+0.4)+2
-    
+
   }
-  
+
   # add final useful data to end of stable variable
   DATA[['N']]=sum(as.numeric(READS))
   DATA[['FWD']]=FWD
   DATA[['REV']]=REV
   DATA[['RLs']]=as.numeric(lengths.of.reads)
   DATA[['RSs']]=raw$V1
-  
+
   # export generated alignment data to RData file
   save(DATA,file = save.file)
-  
+
   # time-stamp for end of alignment job
   show(date())
-  
+
 }
 
 if(process){
-  
+
   #######################
   ## Fragment Data Processing
   #######################
-  
+
   # loading RData file containing alignment data
   if (!exists('DATA')) {
     load(load.file)
   }
-  
+
   # deleting extraneous variables
   #try(rm(list = setdiff(ls(),c('DATA','completeness','matching','thresh','plotting','corr.sim','uncorr.sim','methyl.probs','bayes.mdl.comp','bayes.mdl.comp.2','weight.mdl','weight.mdl.2','proc.clust.score','proc.clust.counter','na.tol'))))
-  
+
   # generate empty matrices to consolidate data
   FWD.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.Chm)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
   REV.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.Chm)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
@@ -583,14 +583,14 @@ if(process){
   REV.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.index)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
   remapped.reads=as.data.frame(matrix(NA,nrow=length(DATA[['RSs']]),ncol=4)); colnames(remapped.reads) <- c('Length','Strand','Mcomp','Mmatch')
   COUNTER=1
-  
+
   # loop for pulling alignment data out of large DATA containers and consolidating it
   for (i in 1:(length(DATA)-5)){
-    
+
     if(DATA[i]=='blank'){
       next
     }
-    
+
     FWD.Chm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['FWD.Chm']]
     REV.Chm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['REV.Chm']]
     FWD.Cm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['FWD.Cm']]
@@ -604,7 +604,7 @@ if(process){
     remapped.reads$Mmatch[i]=mean(as.numeric(DATA[[i]]$Q[,2]),na.rm = T)
     if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
       remapped.reads$Strand[i]='FWD'
-    } 
+    }
     if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
       remapped.reads$Strand[i]='REV'
     }
@@ -612,11 +612,11 @@ if(process){
       remapped.reads$Strand[i]=sum(as.numeric(DATA[[i]]$Q[which(DATA[[i]]$Q[,3]=='REV'),1]),na.rm = T)/sum(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
     }
     COUNTER=COUNTER+nrow(DATA[[i]]$Q)
-    
+
   }
   FWD.index[FWD.index<0]=NA
   REV.index[REV.index<0]=NA
-  
+
   # compile data for REV polymers with sufficient mapping quality
   polymer.ids=which(remapped.reads$Strand=='REV' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
   polymer.Chm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
@@ -633,7 +633,7 @@ if(process){
     polymer.Cm[i,1:length(temp.Cm)]=temp.Cm
   }
   polymer.Both=polymer.Chm+polymer.Cm
-  
+
   # compile data for FWD polymers with sufficient mapping quality
   polymer.ids.fwd=which(remapped.reads$Strand=='FWD' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
   polymer.Chm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
@@ -650,13 +650,13 @@ if(process){
     polymer.Cm.fwd[i,1:length(temp.Cm)]=temp.Cm
   }
   polymer.Both.fwd=polymer.Chm.fwd+polymer.Cm.fwd
-  
+
   # pull methylation data for only reads with sufficient mapping quality
   FWD.Chm.pruned=FWD.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
   FWD.Cm.pruned=FWD.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
   REV.Chm.pruned=REV.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
   REV.Cm.pruned=REV.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
-  
+
   # calculate total methylation data
   FWD.both.pruned=FWD.Chm.pruned+FWD.Cm.pruned
   try(FWD.both.pruned[is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)==F]<-FWD.Chm.pruned[is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)==F])
@@ -664,7 +664,7 @@ if(process){
   REV.both.pruned=REV.Chm.pruned+REV.Cm.pruned
   try(REV.both.pruned[is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)==F]<-REV.Chm.pruned[is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)==F])
   try(REV.both.pruned[is.na(REV.Cm.pruned)==F & is.na(REV.Chm.pruned)]<-REV.Cm.pruned[is.na(REV.Cm.pruned)==F & is.na(REV.Chm.pruned)])
-  
+
   #clean up data sets
   data.actual.rev=REV.Cm.pruned[rowSums(is.na(REV.Cm.pruned))<ncol(REV.Cm.pruned),rev(REV.sites)]
   data.actual.fwd=FWD.Cm.pruned[rowSums(is.na(FWD.Cm.pruned))<ncol(FWD.Cm.pruned),FWD.sites]
@@ -672,45 +672,45 @@ if(process){
   #######################
   ## Processivity Analysis and Graphing
   #######################
-  
+
   # Get threshold values
     # Uncomment and comment lines below for pre-ligated fragment analysis
-  
+
   #thresh <- find_thresh_for_auc(polymer.Both.fwd, polymer.Both)
   thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
-  
+
   #fwd.binary <- binarize_matrix(polymer.Both.fwd, thresh)
   fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
-  
+
   #rev.binary <- binarize_matrix(polymer.Both, thresh)
   rev.binary <- binarize_matrix(data.actual.rev, thresh)
-  
+
   fwd.binary.surv <- get_survival_data(fwd.binary)
   rev.binary.surv <- get_survival_data(rev.binary)
-  
+
   fwd.surv.plot <- empirical_survival(fwd.binary.surv$duration)
   rev.surv.plot <- empirical_survival(rev.binary.surv$duration)
-  
+
   fwd.frac.full <- fraction_full(fwd.binary.surv)
   rev.frac.full <- fraction_full(rev.binary.surv)
   frac.full <- c(fwd.frac.full, rev.frac.full)
-  
+
   fwd.auc <- compute_auc(fwd.surv.plot)
   rev.auc <- compute_auc(rev.surv.plot)
   auc <- c(fwd.auc, rev.auc)
-  
+
   fwd.median.dur <- median_duration(fwd.surv.plot)
   rev.median.dur <- median_duration(rev.surv.plot)
   median <- c(fwd.median.dur, rev.median.dur)
-  
+
   matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv)
   summary<- data.frame(strand = names(matrices), frac.full, auc, median)
-  
+
   save(matrices, file="methylation_matrices.RDS")
   write.csv(summary, "survival_summary.csv")
-  
+
   wd <- getwd()
-  
+
   # plotting survival analysis
   png(paste0(wd, "/methylation_survival.png"), height = 1320, width = 2800, res=300)
   par(mfrow=c(1,1),mar=c(5,6,3,8))
@@ -724,9 +724,9 @@ if(process){
   #grid()
   #dev.copy2pdf(file="methylation_survival.pdf", height = 5, width = 7)
   dev.off()
-  
+
   write.csv(rev.binary, "revbinary.csv")
-  
+
   # Distribution analysis - comment out below here for ligated (heterogeneous length) products
   fwd_vals <- (colSums(fwd.binary) / nrow(fwd.binary))*100
   rev_vals <- (colSums(rev.binary) / nrow(rev.binary))*100
@@ -757,5 +757,5 @@ if(process){
   dev.off()
 
 }
- 
+
 }
