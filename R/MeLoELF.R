@@ -2,33 +2,37 @@
 #
 # An R script for analyzing MeLoELF-seq data (Nanopore sequencing of oligomerized methylation reaction products)
 #
+# Parsing/alignment by Wayne Hemphill
+# Processivity analysis by Ella R. Tommer
+#
 ### COMMENTS
 #
-# Parsing/alignment by Wayne Hemphill
-# Processivity analysis by Ella Tommer
+# On a 16-core Apple M3 Max, maps about 9,000 reads/min with full parallelization
 #
-# On a 16-core Apple M3 Max, maps about 15,000 reads/min with full parallelization
-#
-################
+###############
 
 ### Script Parameterization (edit as necessary)
 MeLoELF <- function(parent,
                     target,
                     FWD.sites,
                     REV.sites,
-                    mdir='~/',
-                    seq.file='sequences.txt',
-                    loc.file='methlocations.txt',
-                    call.file='methcalls.txt',
+                    mdir,
+                    sam.file,
                     crunch.too=T,
                     process=T,
+                    pre.ligated=F,
+                    methyl.type='B',
+                    thresh.meth='BM',
+                    target_fwd_auc=0.9,
                     read.length=c(10,3000),
                     completeness=0.9,
                     matching=0.9,
-                    target_fwd_auc=0.9,
-                    save.file='align.RData',
-                    load.file='align.RData',
-                    plot_title=NULL){
+                    align.file='align.RData',
+                    processed.file='processed.RData',
+                    seq.file='sequences.txt',
+                    melo.file='methlocations.txt',
+                    meca.file='methcalls.txt',
+                    plot_title=''){
 
 
 #######################################################################
@@ -49,302 +53,27 @@ library(doParallel)
 ## Create custom functions for later analysis
 #######################
 
-slideSum <- function(x,n=1){
-  data=c(rep(0,times=n),x,rep(0,times=n))
-  results=rep(NA,times=length(x))
-  for(i in 1:length(x)){
-    results[i]=sum(data[i:(i+2*n)])
-  }
-  return(results)
-}
-
-bounds <- function(data){
-  s1=slideSum(as.integer(data))
-  if(sum(s1>1)==0){
-    return(NULL)
-  }
-  s2=range(which(s1>1))
-  results=rep(F,times=length(data))
-  results[s2[1]:s2[2]]=T
-  return(results)
-}
-
-uncorr.sim <- function(data){
-  sim=matrix(0,nrow=nrow(data),ncol = ncol(data))
-  for(i in 1:ncol(sim)){
-    sim[,i]=data[sample(1:nrow(sim),size = nrow(sim),replace = F),i]
-  }
-  return(sim)
-}
-
-corr.sim <- function(data){
-  sim=matrix(0,nrow=nrow(data),ncol = ncol(data))
-  for(i in 1:ncol(sim)){
-    sim[,i]=data[order(data[,i]),i]
-  }
-  return(sim)
-}
-
-methyl.probs <- function(data,thresh){
-  s.1=rowSums(data>=thresh)
-  s.2=table(s.1)/nrow(data)
-  results=rep(0,times=ncol(data)+1)
-  results[as.numeric(names(s.2))+1]=as.vector(s.2)
-  return(results)
-}
-
-bayes.mdl.comp <- function(data,null,alt){
-  data.adj=data[['y']]/mean(data[['y']])
-  null.adj=null[['y']]/mean(null[['y']])
-  alt.adj=alt[['y']]/mean(alt[['y']])
-  null.share=mean(apply(rbind(null.adj,data.adj),2,min))
-  alt.share=mean(apply(rbind(alt.adj,data.adj),2,min))
-  conserved=mean(apply(rbind(alt.adj,null.adj,data.adj),2,min))
-  BF10=log2((alt.share-conserved)/(null.share-conserved))
-  proc=(alt.share-conserved)/(null.share+alt.share-2*conserved)
-  return(c(BF10,proc))
-}
-
-bayes.mdl.comp.2 <- function(data,null,alt){
-  null.share=sum(apply(rbind(null,data),2,min))
-  alt.share=sum(apply(rbind(alt,data),2,min))
-  conserved=sum(apply(rbind(alt,null,data),2,min))
-  corr=(alt.share-conserved)/(null.share+alt.share-2*conserved)
-  return(corr)
-}
-
-weight.mdl <- function(data,null,alt){
-  data.adj=data[['y']]/mean(data[['y']])
-  null.adj=null[['y']]/mean(null[['y']])
-  alt.adj=alt[['y']]/mean(alt[['y']])
-  s.1=(data.adj-null.adj)/(alt.adj-null.adj)
-  result=c(mean(s.1),sd(s.1))
-  return(result)
-}
-
-weight.mdl.2 <- function(data,null,alt){
-  s.1=(data-null)/(alt-null)
-  result=c(mean(s.1),sd(s.1))
-  return(result)
-}
-
-proc.clust.score <- function(data){
-  data.flank=c(NA,data,NA)
-  vars=data
-  for(i in 1:length(data)){
-    vars[i]=abs(data.flank[i+1]-mean(data.flank[c(i,i+2)],na.rm=T))
-  }
-  score=(1-mean(vars))*mean(data)
-  return(score)
-}
-
-proc.clust.counter <- function(data,thresh){
-  input=c(t(cbind(data>=thresh,rep(F,times=nrow(data)))))
-  record=rep(0,times=sum(input))
-  index=1
-  for(i in 1:(length(input)-1)){
-    record[index]=record[index]+sum(input[i])
-    if(input[i] & input[i+1]==F){
-      index=index+1
-    }
-  }
-  counts=record[1:(index-1)]
-  results=rep(0,times=ncol(data))
-  s.1=table(counts)/length(counts)
-  results[as.numeric(names(s.1))]=as.vector(s.1)
-  return(results)
-}
-
-# helper function for heterogenous read length analysis
-trim_trailing_nas <- function(mat) {
-  # Trim trailing NAs row-wise
-  trimmed_rows <- lapply(seq_len(nrow(mat)), function(i) {
-    row <- mat[i, ]
-    if (all(is.na(row))) return(NA_real_)
-    last_non_na <- max(which(!is.na(row)))
-    row[1:last_non_na]
-  })
-  # Determine max row length after trimming
-  max_len <- max(lengths(trimmed_rows))
-  # Pad rows back to rectangular matrix
-  padded <- t(sapply(trimmed_rows, function(row) {
-    c(row, rep(NA_real_, max_len - length(row)))
-  }))
-  storage.mode(padded) <- "numeric"
-  return(padded)
-}
-
-# scanning function to determine binarization threshold value
-find_thresh_for_auc <- function(data.actual.fwd, data.actual,
-                                target_auc = 0.9, n_initial = 30, refine_steps = 5) {
-  #trim trailing NAs & repad to matrix
-  fwd_trimmed <- trim_trailing_nas(data.actual.fwd)
-  rev_trimmed <- trim_trailing_nas(data.actual)
-  # flatten numeric range for threshold search
-  flat <- unlist(fwd_trimmed)
-  flat <- as.numeric(flat[!is.na(suppressWarnings(as.numeric(flat)))])
-  search_range <- range(flat, na.rm = TRUE)
-  # AUC calculator for a given threshold
-  compute_fwd_auc <- function(thresh) {
-    # binarize  matrices
-    fwd.binary <- binarize_matrix(fwd_trimmed, thresh)
-    rev.binary <- binarize_matrix(rev_trimmed, thresh)
-    # reverse columns (cat strand)
-    rev.binary <- rev.binary[, rev(seq_len(ncol(rev.binary))), drop = FALSE]
-    # compute column means
-    fwd.binary.mean <- colMeans(fwd.binary, na.rm = TRUE)
-    # keep positions with appreciable forward methylation
-    keep <- which(fwd.binary.mean > 0.5)
-    if (length(keep) < 2) return(NA)
-    fwd.filtered <- fwd.binary[, keep, drop = FALSE]
-    # survival durations
-    surv_vals <- get_survival_data(fwd.filtered)$duration
-    if (length(surv_vals) < 2) return(NA)
-    surv_curve <- empirical_survival(surv_vals)
-    compute_auc(surv_curve)
-  }
-  # initial scan for threshold value
-  thresh_grid <- seq(search_range[1], search_range[2], length.out = n_initial)
-  auc_vals <- sapply(thresh_grid, compute_fwd_auc)
-  # refinement
-  for (i in seq_len(refine_steps)) {
-    valid <- which(!is.na(auc_vals))
-    if (length(valid) < 3) break
-    idx_best <- valid[which.min(abs(auc_vals[valid] - target_auc))]
-    best_thresh <- thresh_grid[idx_best]
-    window <- diff(search_range) / (5 * i)
-    sub_range <- c(
-      max(search_range[1], best_thresh - window),
-      min(search_range[2], best_thresh + window)
-    )
-    thresh_grid <- seq(sub_range[1], sub_range[2], length.out = n_initial)
-    auc_vals <- sapply(thresh_grid, compute_fwd_auc)
-  }
-  #final threshold value selection
-  valid <- which(!is.na(auc_vals))
-  idx_best <- valid[which.min(abs(auc_vals[valid] - target_auc))]
-  best_thresh <- thresh_grid[idx_best]
-  final_auc  <- auc_vals[idx_best]
-  message(sprintf("Chosen threshold = %.4f (achieved AUC = %.3f)",
-                  best_thresh, final_auc))
-  return(best_thresh)
-}
-
-# binarize data based on threshold (methylated=1, unmethylated=0)
-binarize_matrix <- function(mat, threshold) {
-  if (!is.matrix(mat) && !is.data.frame(mat)) {
-    stop("Input must be a matrix or data frame.")
-  }
-  # convert to numeric matrix
-  mat_num <- as.matrix(mat)
-  # apply threshold: binarize methylation data
-  bin_mat <- ifelse(mat_num < threshold, 0, 1)
-  return(bin_mat)
-}
-
-# survival analysis - find survival processivity metrics
-get_survival_data <- function(mat) {
-  do.call(rbind, lapply(seq_len(nrow(mat)), function(i) {
-    row <- mat[i, ]
-    # skip if entire row is NA
-    if (all(is.na(row))) return(NULL)
-    # trim trailing NAs (for heterogenous length products)
-    non_na_idx <- which(!is.na(row))
-    if (length(non_na_idx) == 0) return(NULL)
-    last_non_na <- max(non_na_idx)
-    row <- row[1:last_non_na]
-    # find the first methylation event
-    first_one_idx <- which(row == 1)
-    if (length(first_one_idx) == 0) return(NULL)
-    first_one <- first_one_idx[1]
-    # slice from first methylation onward
-    trimmed <- row[first_one:length(row)]
-    # rle on trimmed region
-    run <- rle(trimmed)
-    consecutive_ones <- run$lengths[1]
-    value_first <- run$values[1]
-    if (value_first != 1) {
-      return(data.frame(read_id = i, duration = 0))
-    }
-    total_len <- length(trimmed)
-    duration <- consecutive_ones / total_len
-    # single isolated methylation duration always = 0
-    if (consecutive_ones == 1) duration <- 0
-    data.frame(read_id = i, duration = duration)
-  }))
-}
-
-# put survival data into appropriate format for survival analysis
-empirical_survival <- function(durations) {
-  durations <- sort(durations)
-  n <- length(durations)
-  # count zeros
-  zero_count <- sum(durations == 0)
-  nonzero_durations <- durations[durations > 0]
-  # build step_x and step_y for survival
-  step_x <- c(0, 0, nonzero_durations, 1)
-  step_y <- c(100, (n - zero_count)/n * 100, (rev(seq_along(nonzero_durations)))/n * 100, 0)
-  data.frame(x = step_x, y = step_y)
-}
-
-# fraction of reads fully methylated
-fraction_full <- function(durations) mean(durations == 1)
-
-# survival analysis AUC calc
-compute_auc <- function(surv_df) {
-  x <- surv_df$x
-  y <- surv_df$y / 100
-  auc <- sum(diff(x) * head(y, -1))
-  return(auc)
-}
-
-# median survival duration calc
-median_duration <- function(surv_df) {
-  idx <- which(surv_df$y <= 50)[1]
-  return(surv_df$x[idx])
-}
-
-# row summary stats for distribution analysis
-row_sum_counts <- function(mat) {
-  if (!is.matrix(mat) && !is.data.frame(mat)) {
-    stop("Input must be a matrix or data frame.")
-  }
-  rs <- rowSums(mat)
-  total_rows <- length(rs)
-  df <- data.frame(
-    sum = 0:max(rs),
-    count = sapply(0:max(rs), function(k) sum(rs == k))
-  )
-  df$percentage <- df$count / total_rows * 100
-  return(df)
-}
-
-# optional survival duration histogram plotting function to get idea of whether positive controls work
-plot_duration_histogram <- function(durations, bins = 6, main = "Histogram of Durations", col = "skyblue") {
-  # separate zeros from non-zeros
-  zeros <- sum(durations == 0)
-  nonzeros <- durations[durations != 0]
-  # create histogram for non-zero values
-  h <- hist(nonzeros,
-            breaks = bins,
-            plot = FALSE)
-  # add zeros as first bar
-  counts <- c(zeros, h$counts)
-  mids <- c(0, h$mids)
-  breaks <- c(0, h$breaks)
-  # plot
-  barplot(counts,
-          names.arg = round(mids, 2),
-          col = col,
-          border = "white",
-          xlab = "Normalized Duration",
-          ylab = "Frequency",
-          main = main)
-  grid()
-}
-
 # Fragment mapping algorithm
 map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
+
+  bounds <- function(data){
+    slideSum <- function(x,n=1){
+      data=c(rep(0,times=n),x,rep(0,times=n))
+      results=rep(NA,times=length(x))
+      for(i in 1:length(x)){
+        results[i]=sum(data[i:(i+2*n)])
+      }
+      return(results)
+    }
+    s1=slideSum(as.integer(data))
+    if(sum(s1>1)==0){
+      return(NULL)
+    }
+    s2=range(which(s1>1))
+    results=rep(F,times=length(data))
+    results[s2[1]:s2[2]]=T
+    return(results)
+  }
 
   test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per value
   lengths.of.reads=length(test.0)
@@ -491,6 +220,196 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
 }
 
+# Mixed beta thresholding
+BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95){
+  data=as.numeric(na.omit(c(data.actual.fwd,data.actual.rev)))
+  fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
+  reg.beta <- function(par,dens=fit.dens,dat=data,meth=met){
+    if(meth=='NLL'){
+      NLL=-sum(log(par[5]*dbeta(dat,shape1 = par[1],shape2 = par[2])+(1-par[5])*dbeta(dat,shape1 = par[3],shape2 = par[4])))
+      return(NLL)
+    }
+    if(meth=='RSS'){
+      b.pdf=par[5]*dbeta(dens$x,shape1 = par[1],shape2 = par[2])+(1-par[5])*dbeta(dens$x,shape1 = par[3],shape2 = par[4])
+      res=sum((dens$y-b.pdf)^2)
+      return(res)
+    }
+  }
+  fit.betas=optim(par = c(a1=5,b1=1,a2=1,b2=5,p=0.5),fn = reg.beta)
+  beta.means=as.numeric(fit.betas$par[c(1,3)]/(fit.betas$par[c(1,3)]+fit.betas$par[c(2,4)]))
+  rel.lik=(dbeta(fit.dens$x,shape1 = fit.betas$par[2*(which.max(beta.means)-1)+1],shape2 = fit.betas$par[2*(which.max(beta.means)-1)+2]))/(dbeta(fit.dens$x,shape1 = fit.betas$par[2*(which.min(beta.means)-1)+1],shape2 = fit.betas$par[2*(which.min(beta.means)-1)+2]))
+  thresh=qbeta(p,fit.betas$par[2*(which.min(beta.means)-1)+1],fit.betas$par[2*(which.min(beta.means)-1)+2])
+  thresh2=fit.dens$x[min(which(rel.lik>1))]
+  plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2])+(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]),col='red');abline(v=thresh,col='green',lwd=2,lty='dashed');abline(v=thresh2,col='blue',lwd=2,lty='dashed');legend('topright',legend = c('Data','Model','Threshold','Threshold 2'),col=c('black','red','green','blue'),fill=c('black','red','green','blue'))
+  return(thresh)
+}
+
+# scanning function to determine binarization threshold value
+find_thresh_for_auc <- function(data.actual.fwd, data.actual,target_auc = 0.9, n_initial = 30, refine_steps = 5) {
+
+  # helper function for heterogenous read length analysis
+  trim_trailing_nas <- function(mat) {
+    # Trim trailing NAs row-wise
+    trimmed_rows <- lapply(seq_len(nrow(mat)), function(i) {
+      row <- mat[i, ]
+      if (all(is.na(row))) return(NA_real_)
+      last_non_na <- max(which(!is.na(row)))
+      row[1:last_non_na]
+    })
+    # Determine max row length after trimming
+    max_len <- max(lengths(trimmed_rows))
+    # Pad rows back to rectangular matrix
+    padded <- t(sapply(trimmed_rows, function(row) {
+      c(row, rep(NA_real_, max_len - length(row)))
+    }))
+    storage.mode(padded) <- "numeric"
+    return(padded)
+  }
+
+  #trim trailing NAs & repad to matrix
+  fwd_trimmed <- trim_trailing_nas(data.actual.fwd)
+  rev_trimmed <- trim_trailing_nas(data.actual)
+  # flatten numeric range for threshold search
+  flat <- unlist(fwd_trimmed)
+  flat <- as.numeric(flat[!is.na(suppressWarnings(as.numeric(flat)))])
+  search_range <- range(flat, na.rm = TRUE)
+  # AUC calculator for a given threshold
+  compute_fwd_auc <- function(thresh) {
+    # binarize  matrices
+    fwd.binary <- binarize_matrix(fwd_trimmed, thresh)
+    rev.binary <- binarize_matrix(rev_trimmed, thresh)
+    # reverse columns (cat strand)
+    rev.binary <- rev.binary[, rev(seq_len(ncol(rev.binary))), drop = FALSE]
+    # compute column means
+    fwd.binary.mean <- colMeans(fwd.binary, na.rm = TRUE)
+    # keep positions with appreciable forward methylation
+    keep <- which(fwd.binary.mean > 0.5)
+    if (length(keep) < 2) return(NA)
+    fwd.filtered <- fwd.binary[, keep, drop = FALSE]
+    # survival durations
+    surv_vals <- get_survival_data(fwd.filtered)$duration
+    if (length(surv_vals) < 2) return(NA)
+    surv_curve <- empirical_survival(surv_vals)
+    compute_auc(surv_curve)
+  }
+  # initial scan for threshold value
+  thresh_grid <- seq(search_range[1], search_range[2], length.out = n_initial)
+  auc_vals <- sapply(thresh_grid, compute_fwd_auc)
+  # refinement
+  for (i in seq_len(refine_steps)) {
+    valid <- which(!is.na(auc_vals))
+    if (length(valid) < 3) break
+    idx_best <- valid[which.min(abs(auc_vals[valid] - target_auc))]
+    best_thresh <- thresh_grid[idx_best]
+    window <- diff(search_range) / (5 * i)
+    sub_range <- c(
+      max(search_range[1], best_thresh - window),
+      min(search_range[2], best_thresh + window)
+    )
+    thresh_grid <- seq(sub_range[1], sub_range[2], length.out = n_initial)
+    auc_vals <- sapply(thresh_grid, compute_fwd_auc)
+  }
+  #final threshold value selection
+  valid <- which(!is.na(auc_vals))
+  idx_best <- valid[which.min(abs(auc_vals[valid] - target_auc))]
+  best_thresh <- thresh_grid[idx_best]
+  final_auc  <- auc_vals[idx_best]
+  message(sprintf("Chosen threshold = %.4f (achieved AUC = %.3f)",
+                  best_thresh, final_auc))
+  return(best_thresh)
+}
+
+# binarize data based on threshold (methylated=1, unmethylated=0)
+binarize_matrix <- function(mat, threshold) {
+  if (!is.matrix(mat) && !is.data.frame(mat)) {
+    stop("Input must be a matrix or data frame.")
+  }
+  # convert to numeric matrix
+  mat_num <- as.matrix(mat)
+  # apply threshold: binarize methylation data
+  bin_mat <- ifelse(mat_num < threshold, 0, 1)
+  return(bin_mat)
+}
+
+# survival analysis - find survival processivity metrics
+get_survival_data <- function(mat) {
+  do.call(rbind, lapply(seq_len(nrow(mat)), function(i) {
+    row <- mat[i, ]
+    # skip if entire row is NA
+    if (all(is.na(row))) return(NULL)
+    # trim trailing NAs (for heterogenous length products)
+    non_na_idx <- which(!is.na(row))
+    if (length(non_na_idx) == 0) return(NULL)
+    last_non_na <- max(non_na_idx)
+    row <- row[1:last_non_na]
+    # find the first methylation event
+    first_one_idx <- which(row == 1)
+    if (length(first_one_idx) == 0) return(NULL)
+    first_one <- first_one_idx[1]
+    # slice from first methylation onward
+    trimmed <- row[first_one:length(row)]
+    # rle on trimmed region
+    run <- rle(trimmed)
+    consecutive_ones <- run$lengths[1]
+    value_first <- run$values[1]
+    if (value_first != 1) {
+      return(data.frame(read_id = i, duration = 0))
+    }
+    total_len <- length(trimmed)
+    duration <- consecutive_ones / total_len
+    # single isolated methylation duration always = 0
+    if (consecutive_ones == 1) duration <- 0
+    data.frame(read_id = i, duration = duration)
+  }))
+}
+
+# put survival data into appropriate format for survival analysis
+empirical_survival <- function(durations) {
+  durations <- sort(durations)
+  n <- length(durations)
+  # count zeros
+  zero_count <- sum(durations == 0)
+  nonzero_durations <- durations[durations > 0]
+  # build step_x and step_y for survival
+  step_x <- c(0, 0, nonzero_durations, 1)
+  step_y <- c(100, (n - zero_count)/n * 100, (rev(seq_along(nonzero_durations)))/n * 100, 0)
+  data.frame(x = step_x, y = step_y)
+}
+
+# fraction of reads fully methylated
+fraction_full <- function(durations) mean(durations == 1)
+
+# survival analysis AUC calc
+compute_auc <- function(surv_df) {
+  x <- surv_df$x
+  y <- surv_df$y / 100
+  auc <- sum(diff(x) * head(y, -1))
+  return(auc)
+}
+
+# median survival duration calc
+median_duration <- function(surv_df) {
+  idx <- which(surv_df$y <= 50)[1]
+  return(surv_df$x[idx])
+}
+
+# row summary stats for distribution analysis
+row_sum_counts <- function(mat) {
+  if (!is.matrix(mat) && !is.data.frame(mat)) {
+    stop("Input must be a matrix or data frame.")
+  }
+  rs <- rowSums(mat)
+  total_rows <- length(rs)
+  df <- data.frame(
+    sum = 0:max(rs),
+    count = sapply(0:max(rs), function(k) sum(rs == k))
+  )
+  df$percentage <- df$count / total_rows * 100
+  return(df)
+}
+
+# Save relevant parameters
+PAR.list=ls()
 
 #######################
 ## Read Parsing and Fragment Mapping
@@ -502,9 +421,14 @@ if(crunch.too){
   # time stamp for beginning of alignment job
   show(date())
 
-  raw=read.csv(file = paste0(mdir,seq.file),header = F) # load sequences from pre-processed file
-  raw.2=as.matrix(read.csv(paste0(mdir,loc.file),header = F,sep = ";")[,]) # load CpG indices from pre-processed file
-  raw.3=read.csv(paste0(mdir,call.file),header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
+  # process relevant sam file information into individual txt files using bash/awk
+  system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file))
+  system(paste0("awk '{print $28}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file))
+  system(paste0("awk '{print $29}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file))
+  #
+  raw=read.csv(file = seq.file,header = F) # load sequences from pre-processed file
+  raw.2=as.matrix(read.csv(melo.file,header = F,sep = ";")[,]) # load CpG indices from pre-processed file
+  raw.3=read.csv(meca.file,header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
 
   # convert input reference sequences into vector of bases
   FWD=str_extract_all(parent,boundary("character"))[[1]]
@@ -554,7 +478,7 @@ if(crunch.too){
   DATA[['RSs']]=raw$V1
 
   # export generated alignment data to RData file
-  save(DATA,file = save.file)
+  save(DATA,file = align.file)
 
   # time-stamp for end of alignment job
   show(date())
@@ -569,11 +493,10 @@ if(process){
 
   # loading RData file containing alignment data
   if (!exists('DATA')) {
-    load(load.file)
+    load(align.file)
+  }else{
+    rm(list=c(setdiff(ls(),c(PAR.list,'DATA'))))
   }
-
-  # deleting extraneous variables
-  #try(rm(list = setdiff(ls(),c('DATA','completeness','matching','thresh','plotting','corr.sim','uncorr.sim','methyl.probs','bayes.mdl.comp','bayes.mdl.comp.2','weight.mdl','weight.mdl.2','proc.clust.score','proc.clust.counter','na.tol'))))
 
   # generate empty matrices to consolidate data
   FWD.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.Chm)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
@@ -599,117 +522,241 @@ if(process){
     REV.Cm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['REV.Cm']]
     Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),1:3]=DATA[[i]][['Q']]
     Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),4]=i
-    FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
-    REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
-    remapped.reads$Length[i]=DATA[['RLs']][i]
-    remapped.reads$Mcomp[i]=mean(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
-    remapped.reads$Mmatch[i]=mean(as.numeric(DATA[[i]]$Q[,2]),na.rm = T)
-    if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
-      remapped.reads$Strand[i]='FWD'
-    }
-    if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
-      remapped.reads$Strand[i]='REV'
-    }
-    if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3])) & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3]))){
-      remapped.reads$Strand[i]=sum(as.numeric(DATA[[i]]$Q[which(DATA[[i]]$Q[,3]=='REV'),1]),na.rm = T)/sum(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
+    if(pre.ligated){
+      FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
+      REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
+      remapped.reads$Length[i]=DATA[['RLs']][i]
+      remapped.reads$Mcomp[i]=mean(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
+      remapped.reads$Mmatch[i]=mean(as.numeric(DATA[[i]]$Q[,2]),na.rm = T)
+      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+        remapped.reads$Strand[i]='FWD'
+      }
+      if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+        remapped.reads$Strand[i]='REV'
+      }
+      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3])) & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3]))){
+        remapped.reads$Strand[i]=sum(as.numeric(DATA[[i]]$Q[which(DATA[[i]]$Q[,3]=='REV'),1]),na.rm = T)/sum(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
+      }
     }
     COUNTER=COUNTER+nrow(DATA[[i]]$Q)
 
   }
-  FWD.index[FWD.index<0]=NA
-  REV.index[REV.index<0]=NA
-
-  # compile data for REV polymers with sufficient mapping quality
-  polymer.ids=which(remapped.reads$Strand=='REV' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
-  polymer.Chm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
-  polymer.Cm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
-  for (i in 1:length(polymer.ids)){
-    temp.Chm=rep(NA,times=remapped.reads$Length[polymer.ids[i]])
-    temp.Cm=rep(NA,times=remapped.reads$Length[polymer.ids[i]])
-    row.ids=which(as.numeric(Q.reads[,4])==polymer.ids[i])
-    temp.Chm[na.omit(c(REV.index[row.ids,REV.sites]))]=c(REV.Chm[row.ids,REV.sites])[!is.na(c(REV.index[row.ids,REV.sites]))]
-    temp.Cm[na.omit(c(REV.index[row.ids,REV.sites]))]=c(REV.Cm[row.ids,REV.sites])[!is.na(c(REV.index[row.ids,REV.sites]))]
-    temp.Chm=as.numeric(na.omit(temp.Chm))
-    temp.Cm=as.numeric(na.omit(temp.Cm))
-    polymer.Chm[i,1:length(temp.Chm)]=temp.Chm
-    polymer.Cm[i,1:length(temp.Cm)]=temp.Cm
+  if(pre.ligated){
+    FWD.index[FWD.index<0]=NA
+    REV.index[REV.index<0]=NA
   }
-  polymer.Both=polymer.Chm+polymer.Cm
 
-  # compile data for FWD polymers with sufficient mapping quality
-  polymer.ids.fwd=which(remapped.reads$Strand=='FWD' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
-  polymer.Chm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
-  polymer.Cm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
-  for (i in 1:length(polymer.ids.fwd)){
-    temp.Chm=rep(NA,times=remapped.reads$Length[polymer.ids.fwd[i]])
-    temp.Cm=rep(NA,times=remapped.reads$Length[polymer.ids.fwd[i]])
-    row.ids.fwd=which(as.numeric(Q.reads[,4])==polymer.ids.fwd[i])
-    temp.Chm[na.omit(c(FWD.index[row.ids.fwd,FWD.sites]))]=c(FWD.Chm[row.ids.fwd,FWD.sites])[!is.na(c(FWD.index[row.ids.fwd,FWD.sites]))]
-    temp.Cm[na.omit(c(FWD.index[row.ids.fwd,FWD.sites]))]=c(FWD.Cm[row.ids.fwd,FWD.sites])[!is.na(c(FWD.index[row.ids.fwd,FWD.sites]))]
-    temp.Chm=as.numeric(na.omit(temp.Chm))
-    temp.Cm=as.numeric(na.omit(temp.Cm))
-    polymer.Chm.fwd[i,1:length(temp.Chm)]=temp.Chm
-    polymer.Cm.fwd[i,1:length(temp.Cm)]=temp.Cm
+  if(pre.ligated){
+
+    # compile data for REV polymers with sufficient mapping quality
+    polymer.ids=which(remapped.reads$Strand=='REV' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
+    polymer.Chm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
+    polymer.Cm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
+    for (i in 1:length(polymer.ids)){
+      temp.Chm=rep(NA,times=remapped.reads$Length[polymer.ids[i]])
+      temp.Cm=rep(NA,times=remapped.reads$Length[polymer.ids[i]])
+      row.ids=which(as.numeric(Q.reads[,4])==polymer.ids[i])
+      temp.Chm[na.omit(c(REV.index[row.ids,REV.sites]))]=c(REV.Chm[row.ids,REV.sites])[!is.na(c(REV.index[row.ids,REV.sites]))]
+      temp.Cm[na.omit(c(REV.index[row.ids,REV.sites]))]=c(REV.Cm[row.ids,REV.sites])[!is.na(c(REV.index[row.ids,REV.sites]))]
+      temp.Chm=as.numeric(na.omit(temp.Chm))
+      temp.Cm=as.numeric(na.omit(temp.Cm))
+      polymer.Chm[i,1:length(temp.Chm)]=temp.Chm
+      polymer.Cm[i,1:length(temp.Cm)]=temp.Cm
+    }
+    polymer.Both=polymer.Chm+polymer.Cm
+
+    # compile data for FWD polymers with sufficient mapping quality
+    polymer.ids.fwd=which(remapped.reads$Strand=='FWD' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
+    polymer.Chm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
+    polymer.Cm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
+    for (i in 1:length(polymer.ids.fwd)){
+      temp.Chm=rep(NA,times=remapped.reads$Length[polymer.ids.fwd[i]])
+      temp.Cm=rep(NA,times=remapped.reads$Length[polymer.ids.fwd[i]])
+      row.ids.fwd=which(as.numeric(Q.reads[,4])==polymer.ids.fwd[i])
+      temp.Chm[na.omit(c(FWD.index[row.ids.fwd,FWD.sites]))]=c(FWD.Chm[row.ids.fwd,FWD.sites])[!is.na(c(FWD.index[row.ids.fwd,FWD.sites]))]
+      temp.Cm[na.omit(c(FWD.index[row.ids.fwd,FWD.sites]))]=c(FWD.Cm[row.ids.fwd,FWD.sites])[!is.na(c(FWD.index[row.ids.fwd,FWD.sites]))]
+      temp.Chm=as.numeric(na.omit(temp.Chm))
+      temp.Cm=as.numeric(na.omit(temp.Cm))
+      polymer.Chm.fwd[i,1:length(temp.Chm)]=temp.Chm
+      polymer.Cm.fwd[i,1:length(temp.Cm)]=temp.Cm
+    }
+    polymer.Both.fwd=polymer.Chm.fwd+polymer.Cm.fwd
+
+    # clean up data sets
+    if(methyl.type=='B'){
+      polymer.actual.fwd=polymer.Both.fwd
+      polymer.actual.rev=polymer.Both
+    }
+    if(methyl.type=='M'){
+      polymer.actual.fwd=polymer.Cm.fwd
+      polymer.actual.rev=polymer.Cm
+    }
+    if(methyl.type=='H'){
+      polymer.actual.fwd=polymer.Chm.fwd
+      polymer.actual.rev=polymer.Chm
+    }
+    #
+    save(polymer.actual.rev,polymer.actual.fwd,file = processed.file)
+
   }
-  polymer.Both.fwd=polymer.Chm.fwd+polymer.Cm.fwd
 
   # pull methylation data for only reads with sufficient mapping quality
-  FWD.Chm.pruned=FWD.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
-  FWD.Cm.pruned=FWD.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
-  REV.Chm.pruned=REV.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
-  REV.Cm.pruned=REV.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
+  if(!pre.ligated){
+    FWD.Chm.pruned=FWD.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
+    FWD.Cm.pruned=FWD.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
+    REV.Chm.pruned=REV.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
+    REV.Cm.pruned=REV.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
+  }
 
   # calculate total methylation data
-  FWD.both.pruned=FWD.Chm.pruned+FWD.Cm.pruned
-  try(FWD.both.pruned[is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)==F]<-FWD.Chm.pruned[is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)==F])
-  try(FWD.both.pruned[is.na(FWD.Cm.pruned)==F & is.na(FWD.Chm.pruned)]<-FWD.Cm.pruned[is.na(FWD.Cm.pruned)==F & is.na(FWD.Chm.pruned)])
-  REV.both.pruned=REV.Chm.pruned+REV.Cm.pruned
-  try(REV.both.pruned[is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)==F]<-REV.Chm.pruned[is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)==F])
-  try(REV.both.pruned[is.na(REV.Cm.pruned)==F & is.na(REV.Chm.pruned)]<-REV.Cm.pruned[is.na(REV.Cm.pruned)==F & is.na(REV.Chm.pruned)])
+  if(!pre.ligated){
+    FWD.both.pruned=FWD.Chm.pruned+FWD.Cm.pruned
+    try(FWD.both.pruned[is.na(FWD.Cm.pruned) & !is.na(FWD.Chm.pruned)]<-FWD.Chm.pruned[is.na(FWD.Cm.pruned) & !is.na(FWD.Chm.pruned)])
+    try(FWD.both.pruned[!is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)]<-FWD.Cm.pruned[!is.na(FWD.Cm.pruned) & is.na(FWD.Chm.pruned)])
+    REV.both.pruned=REV.Chm.pruned+REV.Cm.pruned
+    try(REV.both.pruned[is.na(REV.Cm.pruned) & !is.na(REV.Chm.pruned)]<-REV.Chm.pruned[is.na(REV.Cm.pruned) & !is.na(REV.Chm.pruned)])
+    try(REV.both.pruned[!is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)]<-REV.Cm.pruned[!is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)])
+  }
 
   #clean up data sets
-  data.actual.rev=REV.Cm.pruned[rowSums(is.na(REV.Cm.pruned))<ncol(REV.Cm.pruned),rev(REV.sites)]
-  data.actual.fwd=FWD.Cm.pruned[rowSums(is.na(FWD.Cm.pruned))<ncol(FWD.Cm.pruned),FWD.sites]
+  if(!pre.ligated){
+    if(methyl.type=='B'){
+      data.actual.rev=REV.both.pruned[rowSums(!is.na(REV.both.pruned))>0,rev(REV.sites)]
+      data.actual.fwd=FWD.both.pruned[rowSums(!is.na(FWD.both.pruned))>0,FWD.sites]
+    }
+    if(methyl.type=='M'){
+      data.actual.rev=REV.Cm.pruned[rowSums(!is.na(REV.Cm.pruned))>0,rev(REV.sites)]
+      data.actual.fwd=FWD.Cm.pruned[rowSums(!is.na(FWD.Cm.pruned))>0,FWD.sites]
+    }
+    if(methyl.type=='H'){
+      data.actual.rev=REV.Chm.pruned[rowSums(!is.na(REV.Chm.pruned))>0,rev(REV.sites)]
+      data.actual.fwd=FWD.Chm.pruned[rowSums(!is.na(FWD.Chm.pruned))>0,FWD.sites]
+    }
+    #
+    save(data.actual.fwd,data.actual.rev,file = processed.file)
+  }
 
   #######################
   ## Processivity Analysis and Graphing
   #######################
 
-  # Get threshold values
-    # Uncomment and comment lines below for pre-ligated fragment analysis
+  if(pre.ligated){
+    # Get threshold values
+    if(thresh.meth=='AUC'){
+      thresh <- find_thresh_for_auc(polymer.actual.fwd, polymer.actual.rev)
+    }
+    if(thresh.meth=='BM'){
+      thresh=BM.thresh(polymer.actual.fwd,polymer.actual.rev)
+    }
 
-  #thresh <- find_thresh_for_auc(polymer.Both.fwd, polymer.Both)
-  thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
+    fwd.binary <- binarize_matrix(polymer.actual.fwd, thresh)
+    rev.binary <- binarize_matrix(polymer.actual.rev, thresh)
+  }
+  if(!pre.ligated){
+    # Get threshold values
+    if(thresh.meth=='AUC'){
+      thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
+    }
+    if(thresh.meth=='BM'){
+      thresh=BM.thresh(data.actual.fwd,data.actual.rev)
+    }
 
-  #fwd.binary <- binarize_matrix(polymer.Both.fwd, thresh)
-  fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
-
-  #rev.binary <- binarize_matrix(polymer.Both, thresh)
-  rev.binary <- binarize_matrix(data.actual.rev, thresh)
+    fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
+    rev.binary <- binarize_matrix(data.actual.rev[,ncol(data.actual.rev):1], thresh)
+  }
+  ctrl.binary=rev.binary; ctrl.binary[!is.na(ctrl.binary)]=0
+  ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary,na.rm = T))]=1
 
   fwd.binary.surv <- get_survival_data(fwd.binary)
   rev.binary.surv <- get_survival_data(rev.binary)
+  ctrl.binary.surv <- get_survival_data(ctrl.binary)
 
   fwd.surv.plot <- empirical_survival(fwd.binary.surv$duration)
   rev.surv.plot <- empirical_survival(rev.binary.surv$duration)
+  ctrl.surv.plot <- empirical_survival(ctrl.binary.surv$duration)
 
   fwd.frac.full <- fraction_full(fwd.binary.surv)
   rev.frac.full <- fraction_full(rev.binary.surv)
-  frac.full <- c(fwd.frac.full, rev.frac.full)
+  ctrl.frac.full <- fraction_full(ctrl.binary.surv)
+  frac.full <- c(fwd.frac.full, rev.frac.full, ctrl.frac.full)
 
   fwd.auc <- compute_auc(fwd.surv.plot)
   rev.auc <- compute_auc(rev.surv.plot)
-  auc <- c(fwd.auc, rev.auc)
+  ctrl.auc <- compute_auc(ctrl.surv.plot)
+  auc <- c(fwd.auc, rev.auc, ctrl.auc)
 
   fwd.median.dur <- median_duration(fwd.surv.plot)
   rev.median.dur <- median_duration(rev.surv.plot)
-  median <- c(fwd.median.dur, rev.median.dur)
+  ctrl.median.dur <- median_duration(ctrl.surv.plot)
+  median <- c(fwd.median.dur, rev.median.dur, ctrl.median.dur)
 
-  matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv)
+  matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv, CTRL = ctrl.binary.surv)
   summary<- data.frame(strand = names(matrices), frac.full, auc, median)
 
-  save(matrices, file="methylation_matrices.RDS")
+  save(matrices,thresh, file="methylation_matrices.RDS")
   write.csv(summary, "survival_summary.csv")
+
+  # quality control analyses
+  if(!pre.ligated){
+    read.filt=nrow(data.actual.rev)/nrow(REV.Cm[rowSums(!is.na(REV.Cm))>0,])
+    fNA.fwd=colSums(is.na(fwd.binary))/nrow(fwd.binary)
+    fNA.rev=colSums(is.na(rev.binary))/nrow(rev.binary)
+    fCpGs.fwd=colSums(fwd.binary,na.rm = T)/nrow(fwd.binary)
+    fCpGs.rev=colSums(rev.binary,na.rm = T)/nrow(rev.binary)
+  }
+  fSs.fwd=sum(rowSums(fwd.binary,na.rm = T)>0)/nrow(fwd.binary)
+  fSs.rev=sum(rowSums(rev.binary,na.rm = T)>0)/nrow(rev.binary)
+  fMs.fwd=sum(fwd.binary,na.rm = T)/sum(!is.na(fwd.binary))
+  fMs.rev=sum(rev.binary,na.rm = T)/sum(!is.na(rev.binary))
+  if(!pre.ligated){
+    f53m.rev=rep(NA,times=nrow(rev.binary))
+    f35m.rev=rep(NA,times=nrow(rev.binary))
+    for(i in 1:nrow(rev.binary)){
+      if(sum(rev.binary[i,]==1,na.rm = T)>0){
+        f53m.rev[i]=min(which(rev.binary[i,]==1))
+        f35m.rev[i]=max(which(rev.binary[i,]==1))
+      }
+    }
+    f53m.rev=table(f53m.rev)/sum(!is.na(f53m.rev))
+    f35m.rev=table(f35m.rev)/sum(!is.na(f35m.rev))
+  }
+  #
+  if(!pre.ligated){
+    png('QCgraphs.png', height = 2650, width = 2800, res=300)
+    par(mfrow=c(2,1),mar=c(3,6,3,1))
+    #
+    FWD.Cm.pdfs=list(NULL)
+    REV.Cm.pdfs=list(NULL)
+    for (i in 1:length(FWD.sites)){
+      FWD.Cm.pdfs[[i]]=density(data.actual.fwd,na.rm = T,from = 0,to = 1)
+      REV.Cm.pdfs[[i]]=density(data.actual.rev,na.rm = T,from = 0,to = 1)
+    }
+    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
+    for(i in 1:length(FWD.sites)){
+      lines(i-0.725-FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
+      lines(i-0.725+FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
+      lines(i-0.275-REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
+      lines(i-0.275+REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
+    }
+    points(1:length(FWD.sites)-0.725,apply(data.actual.fwd,2,median,na.rm=T),col='purple',pch='-',cex=5)
+    points(1:length(REV.sites)-0.275,apply(data.actual.rev,2,median,na.rm=T),col='purple',pch='-',cex=5)
+    axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.6)
+    abline(h=thresh,lty='solid',col='grey',lwd=2)
+    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.2)
+    #
+    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main='Methyl Location Distributions',cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
+    axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
+    abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
+    abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
+    abline(h=read.filt,col='orange',lty='dotted',lwd=2)
+    points(c(0:6)*5+0.5,fCpGs.fwd,type='h',pch=22,lwd=15,col=1)
+    points(c(0:6)*5+1.5,rev(fCpGs.rev),type='h',pch=22,lwd=15,col=2)
+    points(c(0:6)*5+2.5,rev(f53m.rev),type='h',pch=22,lwd=15,col=3)
+    points(c(0:6)*5+3.5,rev(f35m.rev),type='h',pch=22,lwd=15,col=4)
+    legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
+    text(x=5*length(FWD.sites)-1,y=c(0.72,0.62,0.52),pos = 4,col = c('red','purple','orange'),cex = 1.0,labels = c('% CpG','% Sub.','% Frag.'))
+    dev.off()
+  }
 
   wd <- getwd()
 
@@ -722,41 +769,49 @@ if(process){
   #main=expression(paste(Delta, "351 - Methylation survival")), cex.axis=1.2, cex.lab = 1.3)
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
   lines(rev.surv.plot$x, rev.surv.plot$y, type="s", col="magenta1", lwd=2)
-  legend('bottomleft', legend = c(paste0('SYNTH (AUC=',round(fwd.auc, digits=2),')'), paste0('CAT (AUC=',round(rev.auc, digits=2),')')),col = c('blue','magenta1'),fill = c('blue','magenta1'),cex=1.5, bty="n")
+  lines(ctrl.surv.plot$x, ctrl.surv.plot$y, type="s", col="grey", lwd=2)
+  legend('bottomleft', legend = c(paste0('SYNTH (AUC=',round(fwd.auc, digits=2),')'), paste0('CAT (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.5, bty="n")
   #grid()
   #dev.copy2pdf(file="methylation_survival.pdf", height = 5, width = 7)
   dev.off()
 
   write.csv(rev.binary, "revbinary.csv")
 
-  # Distribution analysis - comment out below here for ligated (heterogeneous length) products
-  fwd_vals <- (colSums(fwd.binary) / nrow(fwd.binary))*100
-  rev_vals <- (colSums(rev.binary) / nrow(rev.binary))*100
-  n_positions <- length(fwd_vals)
+  if(!pre.ligated){
+    # Distribution analysis
+    fwd_vals <- (colSums(fwd.binary) / nrow(fwd.binary))*100
+    rev_vals <- (colSums(rev.binary) / nrow(rev.binary))*100
+    ctrl_vals <- (colSums(ctrl.binary) / nrow(ctrl.binary))*100
+    n_positions <- length(fwd_vals)
 
-  fwd.binary.counts <- row_sum_counts(na.omit(fwd.binary))
-  rev.binary.counts <- row_sum_counts(na.omit(rev.binary))
+    fwd.binary.counts <- row_sum_counts(na.omit(fwd.binary))
+    rev.binary.counts <- row_sum_counts(na.omit(rev.binary))
+    ctrl.binary.counts <- row_sum_counts(na.omit(ctrl.binary))
 
-  valsmat <- rbind(fwd_vals, rev_vals)
-  valsmat_sub <- valsmat[, -1, drop=FALSE]
+    valsmat <- rbind(fwd_vals, rev_vals,ctrl_vals)
+    valsmat_sub <- valsmat[, -1, drop=FALSE]
 
-  new_labels <- 1:(ncol(valsmat) - 1)
+    new_labels <- 1:(ncol(valsmat) - 1)
 
-  fwd_vals <- fwd.binary.counts[-1, 3]
-  rev_vals <- rev.binary.counts[-1, 3]
-  x_labels <- fwd.binary.counts[-1, 1]
+    fwd_vals <- fwd.binary.counts[-1, 3]
+    rev_vals <- rev.binary.counts[-1, 3]
+    ctrl_vals <- ctrl.binary.counts[-1, 3]
+    x_labels <- fwd.binary.counts[-1, 1]
 
-  png(paste0(wd, "/methyl_distribution.png"), height = 1320, width = 2800, res=300)
-  par(mfrow=c(1,1), mar=c(5,6,3,8), xpd=TRUE)
+    png(paste0(wd, "/methyl_distribution.png"), height = 1320, width = 2800, res=300)
+    par(mfrow=c(1,1), mar=c(5,6,3,8), xpd=TRUE)
 
 
-  suppressWarnings(
-    barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(2, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2.5,cex.axis = 2,ylab = 'Percent of reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste(plot_title, " - Methylation distribution")))
-  barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(2, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
-  axis(1, at = seq(0, (length(fwd_vals) - 1) * 3 + 1, by = 3), labels = x_labels, cex.axis = 2)
-  legend('topright',inset = c(-0.2, 0.1),legend = c('SYNTH', 'CAT'),col = c('blue', 'magenta1'),fill = c('blue', 'magenta1'),cex = 1.5,bty = "n")
+    suppressWarnings(
+      barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2.5,cex.axis = 2,ylab = 'Percent of reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste(plot_title, " - Methylation distribution")))
+    barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(3, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
+    barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(3, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
+    axis(1, at = seq(0, (length(fwd_vals) - 1) * 4 + 1, by = 4)+1.5, labels = x_labels, cex.axis = 2)
+    legend('topright',inset = c(-0.2, 0.1),legend = c('SYNTH', 'CAT','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.5,bty = "n")
 
-  dev.off()
+    dev.off()
+
+  }
 
 }
 
