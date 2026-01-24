@@ -17,7 +17,7 @@ MeLoELF <- function(parent,
                     FWD.sites,
                     REV.sites,
                     mdir=getwd(),
-                    sam.file=NULL,
+                    sam.file=list.files(path = mdir,pattern = '*.sam'),
                     crunch.too=T,
                     process=T,
                     pre.ligated=F,
@@ -420,11 +420,6 @@ if(crunch.too){
 
   # time stamp for beginning of alignment job
   show(date())
-
-  # identify sam file
-  if(is.null(sam.file)){
-    sam.file=list.files(pattern = '*.sam')
-  }
 
   # process relevant sam file information into individual txt files using bash/awk
   system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file))
