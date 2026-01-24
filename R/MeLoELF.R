@@ -16,8 +16,8 @@ MeLoELF <- function(parent,
                     target,
                     FWD.sites,
                     REV.sites,
-                    mdir,
-                    sam.file,
+                    mdir=getwd(),
+                    sam.file=NULL,
                     crunch.too=T,
                     process=T,
                     pre.ligated=F,
@@ -421,6 +421,11 @@ if(crunch.too){
   # time stamp for beginning of alignment job
   show(date())
 
+  # identify sam file
+  if(is.null(sam.file)){
+    sam.file=list.files(pattern = '*.sam')
+  }
+
   # process relevant sam file information into individual txt files using bash/awk
   system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file))
   system(paste0("awk '{print $28}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file))
@@ -765,12 +770,12 @@ if(process){
   par(mfrow=c(1,1),mar=c(5,6,3,8))
   plot(0, 0, type="n", xlim=c(0,1), ylim=c(0,100),
        xlab="Probability of successive methylation", ylab="Percentage of reads",
-       main=paste(plot_title, " - Methylation survival"), cex.main = 2.5, cex.axis=2, cex.lab = 2)
+       main=paste(plot_title, " - Methylation survival"), cex.main = 2, cex.axis=2, cex.lab = 2)
   #main=expression(paste(Delta, "351 - Methylation survival")), cex.axis=1.2, cex.lab = 1.3)
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
   lines(rev.surv.plot$x, rev.surv.plot$y, type="s", col="magenta1", lwd=2)
   lines(ctrl.surv.plot$x, ctrl.surv.plot$y, type="s", col="grey", lwd=2)
-  legend('bottomleft', legend = c(paste0('SYNTH (AUC=',round(fwd.auc, digits=2),')'), paste0('CAT (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.5, bty="n")
+  legend('topright', legend = c(paste0('SYNTH (AUC=',round(fwd.auc, digits=2),')'), paste0('CAT (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
   #grid()
   #dev.copy2pdf(file="methylation_survival.pdf", height = 5, width = 7)
   dev.off()
@@ -803,11 +808,11 @@ if(process){
 
 
     suppressWarnings(
-      barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2.5,cex.axis = 2,ylab = 'Percent of reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste(plot_title, " - Methylation distribution")))
+      barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2,cex.axis = 2,ylab = 'Percent of reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste(plot_title, " - Methylation distribution")))
     barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(3, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
     barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(3, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
     axis(1, at = seq(0, (length(fwd_vals) - 1) * 4 + 1, by = 4)+1.5, labels = x_labels, cex.axis = 2)
-    legend('topright',inset = c(-0.2, 0.1),legend = c('SYNTH', 'CAT','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.5,bty = "n")
+    legend('topright',inset = c(-0.2, 0.1),legend = c('SYNTH', 'CAT','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
 
     dev.off()
 

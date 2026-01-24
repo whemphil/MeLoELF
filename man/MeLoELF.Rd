@@ -9,8 +9,8 @@ MeLoELF(parent,
         target,
         FWD.sites,
         REV.sites,
-        mdir,
-        sam.file,
+        mdir=getwd(),
+        sam.file=NULL,
         crunch.too=T,
         process=T,
         pre.ligated=F,
@@ -28,12 +28,18 @@ MeLoELF(parent,
         plot_title='')
 }
 \arguments{
+
+Required:
+
 \item{parent}{A single character string indicating the substrate's FWD/parent strand sequence (5'->3'); DEFAULT -- none.}
 \item{target}{A single character string indicating the substrate's REV/target strand sequence (5'->3'); DEFAULT -- none.}
 \item{FWD.sites}{A numeric vector indicating indices for CpG methylation sites in the parent strand; DEFAULT -- none.}
 \item{REV.sites}{A numeric vector indicating indices for CpG methylation sites in the target strand; DEFAULT -- none.}
-\item{mdir}{A single character string indicating the working directory for files; DEFAULT -- none.}
-\item{sam.file}{A single character string indicating the filename for the input sam file containing the Nanopore sequencing data; DEFAULT -- none.}
+
+Defaults:
+
+\item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
+\item{sam.file}{A single character string indicating the filename for the input sam file containing the Nanopore sequencing data; DEFAULT -- searches mdir directory for sam file.}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
@@ -55,10 +61,10 @@ MeLoELF(parent,
 
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
-
 }
 
 \value{
+
 Files:
 
 \item{sequences.txt}{A txt file containing the Nanopore read sequences parsed from the input sam file.}
