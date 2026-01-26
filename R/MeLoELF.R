@@ -221,8 +221,16 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 }
 
 # Mixed beta thresholding
-BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95){
-  data=as.numeric(na.omit(c(data.actual.fwd,data.actual.rev)))
+BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set='b'){
+  if(set=='b'){
+    data=as.numeric(na.omit(c(data.actual.fwd,data.actual.rev)))
+  }
+  if(set=='f'){
+    data=as.numeric(na.omit(c(data.actual.fwd)))
+  }
+  if(set=='r'){
+    data=as.numeric(na.omit(c(data.actual.rev)))
+  }
   fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
   reg.beta <- function(par,dens=fit.dens,dat=data,meth=met){
     if(meth=='NLL'){
@@ -230,12 +238,45 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95){
       return(NLL)
     }
     if(meth=='RSS'){
-      b.pdf=par[5]*dbeta(dens$x,shape1 = par[1],shape2 = par[2])+(1-par[5])*dbeta(dens$x,shape1 = par[3],shape2 = par[4])
-      res=sum((dens$y-b.pdf)^2)
+      b.pdf=par[5]*dbeta(dens$x[-c(1,length(dens$x))],shape1 = par[1],shape2 = par[2])+(1-par[5])*dbeta(dens$x[-c(1,length(dens$x))],shape1 = par[3],shape2 = par[4])
+      res=sum((dens$y[-c(1,length(dens$x))]-b.pdf)^2)
       return(res)
     }
   }
-  fit.betas=optim(par = c(a1=5,b1=1,a2=1,b2=5,p=0.5),fn = reg.beta)
+  init.par.est <- function(data,fit.dens){
+    cdf=data.frame(x=fit.dens$x,y=mean(diff(fit.dens$x))*cumsum(fit.dens$y))
+    cdf.fit=smooth.spline(x = cdf$x,y = cdf$y)
+    d.cdf=predict(cdf.fit,der=1)
+    sep.point=fit.dens$x[which.min(d.cdf$y)]
+    p=sum(fit.dens$y[fit.dens$x<sep.point],na.rm = T)/sum(fit.dens$y,na.rm = T)
+    m1=mean(data[data<sep.point],na.rm = T)
+    sd1=sd(data[data<sep.point],na.rm = T)
+    m2=mean(data[data>=sep.point],na.rm = T)
+    sd2=sd(data[data>=sep.point],na.rm = T)
+    beta.par.calc <- function(m,s){
+      alpha=m*(m*(1-m)/s^2-1)
+      beta=alpha*(1-m)/m
+      return(as.numeric(c(alpha,beta)))
+    }
+    pars=c(a1=beta.par.calc(m1,sd1)[1],b1=beta.par.calc(m1,sd1)[2],a2=beta.par.calc(m2,sd2)[1],b2=beta.par.calc(m2,sd2)[2],p=p)
+    return(pars)
+  }
+  try(fit.betasSTD <- optim(par = c(a1=7,b1=1.2,a2=5,b2=50,p=0.5),fn = reg.beta))
+  try(fit.betasEST <- optim(par = init.par.est(data,fit.dens),fn = reg.beta))
+  if(exists('fit.betasEST') & !exists('fit.betasSTD')){
+    fit.betas=fit.betasEST
+  }
+  if(!exists('fit.betasEST') & exists('fit.betasSTD')){
+    fit.betas=fit.betasSTD
+  }
+  if(exists('fit.betasEST') & exists('fit.betasSTD')){
+    if(fit.betasEST$value<=fit.betasSTD$value){
+      fit.betas=fit.betasEST
+    }
+    if(fit.betasEST$value>fit.betasSTD$value){
+      fit.betas=fit.betasSTD
+    }
+  }
   beta.means=as.numeric(fit.betas$par[c(1,3)]/(fit.betas$par[c(1,3)]+fit.betas$par[c(2,4)]))
   rel.lik=(dbeta(fit.dens$x,shape1 = fit.betas$par[2*(which.max(beta.means)-1)+1],shape2 = fit.betas$par[2*(which.max(beta.means)-1)+2]))/(dbeta(fit.dens$x,shape1 = fit.betas$par[2*(which.min(beta.means)-1)+1],shape2 = fit.betas$par[2*(which.min(beta.means)-1)+2]))
   thresh=qbeta(p,fit.betas$par[2*(which.min(beta.means)-1)+1],fit.betas$par[2*(which.min(beta.means)-1)+2])
@@ -419,7 +460,7 @@ PAR.list=ls()
 if(crunch.too){
 
   # time stamp for beginning of alignment job
-  show(date())
+  show(paste0('Align Start:  ',Sys.time()))
 
   # process relevant sam file information into individual txt files using bash/awk
   system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file))
@@ -481,7 +522,7 @@ if(crunch.too){
   save(DATA,file = align.file)
 
   # time-stamp for end of alignment job
-  show(date())
+  show(paste0('Align End:  ',Sys.time()))
 
 }
 
@@ -490,6 +531,9 @@ if(process){
   #######################
   ## Fragment Data Processing
   #######################
+
+  # time stamp for beginning of processing job
+  show(paste0('Processing Start:  ',Sys.time()))
 
   # loading RData file containing alignment data
   if (!exists('DATA')) {
@@ -812,6 +856,9 @@ if(process){
     dev.off()
 
   }
+
+  # time stamp for end of processing job
+  show(paste0('Processing End:  ',Sys.time()))
 
 }
 
