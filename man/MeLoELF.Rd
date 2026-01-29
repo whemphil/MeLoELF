@@ -3,6 +3,8 @@
 \title{Analysis of MeLoELF-seq Data}
 \description{
 Function to map and computationally deconstruct end-ligated frament sequences, parse their methylation states, and analyze enzyme activity and processivity.
+
+Designed and optimized for Unix machines -- may return errors on Windows PCs.
 }
 \usage{
 MeLoELF(parent,
@@ -16,7 +18,7 @@ MeLoELF(parent,
         pre.ligated=F,
         methyl.type='B',
         thresh.meth='BM',
-        BM.strand.data='rev',
+        BM.strand.data='r',
         target_fwd_auc=0.9,
         read.length=c(10,3000),
         completeness=0.9,

@@ -520,13 +520,19 @@ PAR.list=ls()
 
 if(crunch.too){
 
+  # warning for Windows PC users
+  if(Sys.info()=='Windows'){
+    show('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs.')
+    show('The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls txt files must be supplied manually to the mdir directory.')
+  }
+
   # time stamp for beginning of alignment job
   show(paste0('Align Start:  ',Sys.time()))
 
   # process relevant sam file information into individual txt files using bash/awk
-  system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file))
-  system(paste0("awk '{print $28}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file))
-  system(paste0("awk '{print $29}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file))
+  try(system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
+  try(system(paste0("awk '{print $28}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
+  try(system(paste0("awk '{print $29}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
   #
   raw=read.csv(file = seq.file,header = F) # load sequences from pre-processed file
   raw.2=as.matrix(read.csv(melo.file,header = F,sep = ";")[,]) # load CpG indices from pre-processed file
