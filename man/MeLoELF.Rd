@@ -16,6 +16,7 @@ MeLoELF(parent,
         pre.ligated=F,
         methyl.type='B',
         thresh.meth='BM',
+        BM.strand.data='rev',
         target_fwd_auc=0.9,
         read.length=c(10,3000),
         completeness=0.9,
@@ -45,6 +46,7 @@ Defaults:
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
 \item{methyl.type}{A single character string indicating which methyl scores should be used for analysis -- 'M' = methyl, 'H' = hydroxy-methyl, 'B' = both/combined; DEFAULT -- 'B'.}
 \item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning; DEFAULT -- 'BM'.}
+\item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- c(10,3000).}
 \item{completeness}{A numeric value indicating the minimum proportion of reference sequence length for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
