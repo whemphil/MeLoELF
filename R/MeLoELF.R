@@ -337,7 +337,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
       thresh=qbeta(p,fit.betasSIN$par[1],fit.betasSIN$par[2])
     }
     if(usr.input=='p'){
-      neg.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);neg.dens[neg.dens<0 | fit.dens$x>fit.dens$x[which.max(fit.dens$y)]]=0
+      neg.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);neg.dens[neg.dens<0 | fit.dens$x>fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
       thresh=fit.dens$x[min(which((cumsum(neg.dens)/sum(neg.dens))>p))]
     }
     abline(v=thresh,col='green',lwd=2,lty='dashed')
