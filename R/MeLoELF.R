@@ -521,7 +521,7 @@ PAR.list=ls()
 if(crunch.too){
 
   # warning for Windows PC users
-  if(Sys.info()=='Windows'){
+  if(Sys.info()['sysname']=='Windows'){
     show('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs.')
     show('The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls txt files must be supplied manually to the mdir directory.')
   }
@@ -776,7 +776,7 @@ if(process){
     rev.binary <- binarize_matrix(data.actual.rev[,ncol(data.actual.rev):1], thresh)
   }
   ctrl.binary=rev.binary; ctrl.binary[!is.na(ctrl.binary)]=0
-  ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary,na.rm = T))]=1
+  ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary,na.rm = T),prob = rep(colSums(rev.binary,na.rm = T)/colSums(!is.na(rev.binary)),times=colSums(!is.na(rev.binary))))]=1
 
   fwd.binary.surv <- get_survival_data(fwd.binary)
   rev.binary.surv <- get_survival_data(rev.binary)
@@ -812,8 +812,8 @@ if(process){
     read.filt=nrow(data.actual.rev)/nrow(REV.Cm[rowSums(!is.na(REV.Cm))>0,])
     fNA.fwd=colSums(is.na(fwd.binary))/nrow(fwd.binary)
     fNA.rev=colSums(is.na(rev.binary))/nrow(rev.binary)
-    fCpGs.fwd=colSums(fwd.binary,na.rm = T)/nrow(fwd.binary)
-    fCpGs.rev=colSums(rev.binary,na.rm = T)/nrow(rev.binary)
+    fCpGs.fwd=colSums(fwd.binary,na.rm = T)/colSums(!is.na(fwd.binary))
+    fCpGs.rev=colSums(rev.binary,na.rm = T)/colSums(!is.na(rev.binary))
   }
   fSs.fwd=sum(rowSums(fwd.binary,na.rm = T)>0)/nrow(fwd.binary)
   fSs.rev=sum(rowSums(rev.binary,na.rm = T)>0)/nrow(rev.binary)
