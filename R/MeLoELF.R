@@ -49,6 +49,7 @@ setwd(mdir)
 library(stringr)
 library(foreach)
 library(doParallel)
+library(pracma)
 
 #######################
 ## Create custom functions for later analysis
@@ -232,6 +233,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   if(set=='r'){
     data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev>0 & data.actual.rev<1])))
   }
+  #data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,7]>0 & data.actual.rev[,7]<1,7])))
   fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
   beta.par.calc <- function(m,s){
     alpha=m*(m*(1-m)/s^2-1)
@@ -250,8 +252,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
     }
   }
   init.par.est <- function(data,fit.dens){
-    cdf=data.frame(x=fit.dens$x,y=mean(diff(fit.dens$x))*cumsum(fit.dens$y))
-    sep.point=fit.dens$x[which.min(fit.dens$y)]
+    sep.point=fit.dens$x[round(mean(pracma::findpeaks(fit.dens$y,minpeakheight = max(fit.dens$y,na.rm = T)*0.2,sortstr = T,npeaks = 2)[,2]))]
     p=sum(fit.dens$y[fit.dens$x<sep.point],na.rm = T)/sum(fit.dens$y,na.rm = T)
     m1=mean(data[data<sep.point],na.rm = T)
     sd1=sd(data[data<sep.point],na.rm = T)
@@ -294,8 +295,8 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
       fit.betas=fit.betasSTD
     }
   }
-  dBIC=log(length(data))*length(fit.betas$par)+2*reg.beta(fit.betas$par,meth = 'NLL')
-  sBIC=log(length(data))*length(fit.betasSIN$par)+2*reg.beta.single(par = fit.betasSIN$par,meth = 'NLL')
+  dBIC=length(fit.betas$par)+(log(fit.betas$value/length(fit.dens$x)))
+  sBIC=length(fit.betasSIN$par)+(log(fit.betasSIN$value/length(fit.dens$x)))
   dBeta.share=dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2])-dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]);dBeta.share[dBeta.share<0]=0;dBeta.share=(1-mean(diff(fit.dens$x),na.rm = T)*sum(dBeta.share))
   if(dBIC<sBIC & dBeta.share<0.5 & abs(0.5-fit.betas$par[5])<0.4){
     beta.means=as.numeric((fit.betas$par[c(1,3)])/(fit.betas$par[c(1,3)]+fit.betas$par[c(2,4)]))
@@ -314,11 +315,11 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   if(sBIC<dBIC | dBeta.share>=0.5 | abs(0.5-fit.betas$par[5])>0.4){
     plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),col='red')
     show('WARNING! -- Methyl score values appear to primarily belong to a single distribution, and its corresponding methylation state is needed for thresholding -- attempting auto-assignment...')
-    if(fit.dens$x[which.max(fit.dens$y)]>0.5){
+    if(fit.dens$x[which.max(fit.dens$y)]>=0.4){
       usr.input='p'
       show('...distribution inferred to correspond to methylated CpGs.')
     }else{
-      if(fit.dens$x[which.max(fit.dens$y)]<0.15){
+      if(fit.dens$x[which.max(fit.dens$y)]<=0.15){
         usr.input='n'
         show('...distribution inferred to correspond to unmethylated CpGs.')
       }else{
@@ -769,7 +770,7 @@ if(process){
       thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
     }
     if(thresh.meth=='BM'){
-      thresh=BM.thresh(data.actual.fwd,data.actual.rev)
+      thresh=rep(BM.thresh(data.actual.fwd,data.actual.rev),times=ncol(data.actual.rev))
     }
 
     fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
