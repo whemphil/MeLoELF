@@ -233,7 +233,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   if(set=='r'){
     data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev>0 & data.actual.rev<1])))
   }
-  #data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,7]>0 & data.actual.rev[,7]<1,7])))
+  #data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,5]>0 & data.actual.rev[,5]<1,5])))
   fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
   beta.par.calc <- function(m,s){
     alpha=m*(m*(1-m)/s^2-1)
@@ -280,7 +280,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   }
   try(fit.betasSTD <- optim(par = c(a1=7,b1=1.2,a2=5,b2=50,p=0.5),fn = reg.beta,lower = c(0,0,0,0,0),upper = c(Inf,Inf,Inf,Inf,1),method = "L-BFGS-B"))
   try(fit.betasEST <- optim(par = init.par.est(data,fit.dens),fn = reg.beta,lower = c(0,0,0,0,0),upper = c(Inf,Inf,Inf,Inf,1),method = "L-BFGS-B"))
-  try(fit.betasSIN <- optim(par = init.par.est.single(data,fit.dens),fn = reg.beta.single,method = "L-BFGS-B"))
+  try(fit.betasSIN <- optim(par = init.par.est.single(data,fit.dens),fn = reg.beta.single))
   if(exists('fit.betasEST') & !exists('fit.betasSTD')){
     fit.betas=fit.betasEST
   }
@@ -295,9 +295,19 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
       fit.betas=fit.betasSTD
     }
   }
-  dBIC=length(fit.betas$par)+(log(fit.betas$value/length(fit.dens$x)))
-  sBIC=length(fit.betasSIN$par)+(log(fit.betasSIN$value/length(fit.dens$x)))
-  dBeta.share=dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2])-dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]);dBeta.share[dBeta.share<0]=0;dBeta.share=(1-mean(diff(fit.dens$x),na.rm = T)*sum(dBeta.share))
+  if(!exists('fit.betasSIN')){
+    try(fit.betasSINn <- optim(par = c(a=8,b=100),fn = reg.beta.single))
+    try(fit.betasSINp <- optim(par = c(a=100,b=8),fn = reg.beta.single))
+    if(fit.betasSINn$value < fit.betasSINp$value){
+      fit.betasSIN=fit.betasSINn
+    }
+    if(fit.betasSINp$value <= fit.betasSINn$value){
+      fit.betasSIN=fit.betasSINp
+    }
+  }
+  dBeta.share=sum(apply(X = rbind(fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]),(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4])),MARGIN = 2,FUN = min))*mean(diff(fit.dens$x),na.rm=T)/min(c(fit.betas$par[5],1-fit.betas$par[5]))
+  dBIC=2*length(fit.betas$par)+length(fit.dens$x)*log(fit.betas$value/length(fit.dens$x))
+  sBIC=2*length(fit.betasSIN$par)+length(fit.dens$x)*log(fit.betasSIN$value/length(fit.dens$x))
   if(dBIC<sBIC & dBeta.share<0.5 & abs(0.5-fit.betas$par[5])<0.4){
     beta.means=as.numeric((fit.betas$par[c(1,3)])/(fit.betas$par[c(1,3)]+fit.betas$par[c(2,4)]))
     if(which.max(beta.means)==1){
@@ -315,7 +325,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   if(sBIC<dBIC | dBeta.share>=0.5 | abs(0.5-fit.betas$par[5])>0.4){
     plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),col='red')
     show('WARNING! -- Methyl score values appear to primarily belong to a single distribution, and its corresponding methylation state is needed for thresholding -- attempting auto-assignment...')
-    if(fit.dens$x[which.max(fit.dens$y)]>=0.4){
+    if(fit.dens$x[which.max(fit.dens$y)]>=0.33){
       usr.input='p'
       show('...distribution inferred to correspond to methylated CpGs.')
     }else{
@@ -339,7 +349,11 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
     }
     if(usr.input=='p'){
       neg.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);neg.dens[neg.dens<0 | fit.dens$x>fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
-      thresh=fit.dens$x[min(which((cumsum(neg.dens)/sum(neg.dens))>p))]
+      if(sum(neg.dens*mean(diff(fit.dens$x),na.rm=T))>=0.05){
+        thresh=fit.dens$x[min(which((cumsum(neg.dens)/sum(neg.dens))>p))]
+      }else{
+        thresh=qbeta(0.01,fit.betasSIN$par[1],fit.betasSIN$par[2])
+      }
     }
     abline(v=thresh,col='green',lwd=2,lty='dashed')
     legend('topright',legend = c('Data','Model','Threshold'),col=c('black','red','green'),fill=c('black','red','green'))
