@@ -843,8 +843,8 @@ if(process){
     FWD.Cm.pdfs=list(NULL)
     REV.Cm.pdfs=list(NULL)
     for (i in 1:length(FWD.sites)){
-      FWD.Cm.pdfs[[i]]=density(data.actual.fwd,na.rm = T,from = 0,to = 1)
-      REV.Cm.pdfs[[i]]=density(data.actual.rev,na.rm = T,from = 0,to = 1)
+      FWD.Cm.pdfs[[i]]=density(data.actual.fwd[,i],na.rm = T,from = 0,to = 1)
+      REV.Cm.pdfs[[i]]=density(data.actual.rev[,i],na.rm = T,from = 0,to = 1)
     }
     plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
     for(i in 1:length(FWD.sites)){
