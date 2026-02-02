@@ -24,6 +24,9 @@ MeLoELF <- function(parent,
                     methyl.type='B',
                     thresh.meth='BM',
                     BM.strand.data='r',
+                    var.thresh=F,
+                    T1.err=0.05,
+                    T2.err=0.01,
                     target_fwd_auc=0.9,
                     read.length=c(10,3000),
                     completeness=0.9,
@@ -223,7 +226,7 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 }
 
 # Mixed beta thresholding
-BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.strand.data){
+BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set=BM.strand.data,p2=T2.err){
   if(set=='b'){
     data=as.numeric(na.omit(c(data.actual.fwd[data.actual.fwd>0 & data.actual.fwd<1],data.actual.rev[data.actual.rev>0 & data.actual.rev<1])))
   }
@@ -233,7 +236,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   if(set=='r'){
     data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev>0 & data.actual.rev<1])))
   }
-  #data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,5]>0 & data.actual.rev[,5]<1,5])))
+  #i=2;data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,i]>0 & data.actual.rev[,i]<1,i])))
   fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
   beta.par.calc <- function(m,s){
     alpha=m*(m*(1-m)/s^2-1)
@@ -308,7 +311,8 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
   dBeta.share=sum(apply(X = rbind(fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]),(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4])),MARGIN = 2,FUN = min))*mean(diff(fit.dens$x),na.rm=T)/min(c(fit.betas$par[5],1-fit.betas$par[5]))
   dBIC=2*length(fit.betas$par)+length(fit.dens$x)*log(fit.betas$value/length(fit.dens$x))
   sBIC=2*length(fit.betasSIN$par)+length(fit.dens$x)*log(fit.betasSIN$value/length(fit.dens$x))
-  if(dBIC<sBIC & dBeta.share<0.5 & abs(0.5-fit.betas$par[5])<0.4){
+  mode.diff=abs(fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]))]-fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]))])
+  if(dBIC<sBIC & dBeta.share<0.5 & abs(0.5-fit.betas$par[5])<0.4 & mode.diff>0.1){
     beta.means=as.numeric((fit.betas$par[c(1,3)])/(fit.betas$par[c(1,3)]+fit.betas$par[c(2,4)]))
     if(which.max(beta.means)==1){
       rel.lik=((fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]))/((1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4])))
@@ -317,12 +321,19 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
       rel.lik=1/((fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]))/((1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4])))
     }
     thresh=qbeta(p,fit.betas$par[2*(which.min(beta.means)-1)+1],fit.betas$par[2*(which.min(beta.means)-1)+2])
-    thresh2=fit.dens$x[min(which(rel.lik>1 & fit.dens$x>min(beta.means)))]
-    plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2])+(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]),col='red');abline(v=thresh,col='green',lwd=2,lty='dashed');abline(v=thresh2,col='blue',lwd=2,lty='dashed');legend('topright',legend = c('Data','Model','Threshold','Threshold 2'),col=c('black','red','green','blue'),fill=c('black','red','green','blue'))
-    lines(fit.dens$x,fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]),lty='dotted',col='purple',lwd=2);lines(fit.dens$x,(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]),lty='dotted',col='purple',lwd=2)
-    #thresh=thresh2
+    #thresh2=fit.dens$x[min(which(rel.lik>1 & fit.dens$x>min(beta.means)))]
+    plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score')
+    lines(fit.dens$x,fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2])+(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]),col='red')
+    abline(v=thresh,col='green',lwd=2,lty='dashed')
+    #abline(v=thresh2,col='blue',lwd=2,lty='dashed')
+    legend('topright',legend = c('Data','Model','Threshold'),col=c('black','red','green'),fill=c('black','red','green'))
+    lines(fit.dens$x,fit.betas$par[5]*dbeta(fit.dens$x,shape1 = fit.betas$par[1],shape2 = fit.betas$par[2]),lty='dotted',col='purple',lwd=2)
+    lines(fit.dens$x,(1-fit.betas$par[5])*dbeta(fit.dens$x,shape1 = fit.betas$par[3],shape2 = fit.betas$par[4]),lty='dotted',col='purple',lwd=2)
+    text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*c(fit.betas$par[5],1-fit.betas$par[5])[which.min(beta.means)]),'%)'),cex=2,col='black')
+    false.neg=pbeta(thresh,fit.betas$par[2*(which.max(beta.means)-1)+1],fit.betas$par[2*(which.max(beta.means)-1)+2])
+    text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(false.neg,2),' (',round(100*false.neg*c(fit.betas$par[5],1-fit.betas$par[5])[which.max(beta.means)]),'%)'),cex=2,col='black')
   }
-  if(sBIC<dBIC | dBeta.share>=0.5 | abs(0.5-fit.betas$par[5])>0.4){
+  if(sBIC<dBIC | dBeta.share>=0.5 | abs(0.5-fit.betas$par[5])>0.4 | mode.diff<=0.1){
     plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),col='red')
     show('WARNING! -- Methyl score values appear to primarily belong to a single distribution, and its corresponding methylation state is needed for thresholding -- attempting auto-assignment...')
     if(fit.dens$x[which.max(fit.dens$y)]>=0.33){
@@ -346,13 +357,26 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=0.95,set=BM.st
     }
     if(usr.input=='n'){
       thresh=qbeta(p,fit.betasSIN$par[1],fit.betasSIN$par[2])
+      pos.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);pos.dens[neg.dens<0 | fit.dens$x<fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
+      if(sum(pos.dens*mean(diff(fit.dens$x),na.rm=T))>=0.05){
+        false.neg=(cumsum(pos.dens)/sum(pos.dens))[which.min(abs(fit.dens$x-thresh))]
+        text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*(1-sum(pos.dens*mean(diff(fit.dens$x),na.rm=T)))),'%)'),cex=2,col='black')
+        text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(false.neg,2),' (',round(100*false.neg*sum(pos.dens*mean(diff(fit.dens$x),na.rm=T))),'%)'),cex=2,col='black')
+      }else{
+        text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (≤',round(100*(1-p)),'%)'),cex=2,col='black')
+        text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ','n.d.',' (','≤5','%)'),cex=2,col='black')
+      }
     }
     if(usr.input=='p'){
-      neg.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);neg.dens[neg.dens<0 | fit.dens$x>fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
+      neg.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);neg.dens[neg.dens<0 | fit.dens$x<fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
       if(sum(neg.dens*mean(diff(fit.dens$x),na.rm=T))>=0.05){
         thresh=fit.dens$x[min(which((cumsum(neg.dens)/sum(neg.dens))>p))]
+        text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*sum(neg.dens*mean(diff(fit.dens$x),na.rm=T))),'%)'),cex=2,col='black')
+        text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(pbeta(thresh,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),2),' (',round(100*pbeta(thresh,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2])*(1-sum(neg.dens*mean(diff(fit.dens$x),na.rm=T)))),'%)'),cex=2,col='black')
       }else{
-        thresh=qbeta(0.01,fit.betasSIN$par[1],fit.betasSIN$par[2])
+        thresh=qbeta(p2,fit.betasSIN$par[1],fit.betasSIN$par[2])
+        text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ','n.d.',' (','≤5','%)'),cex=2,col='black')
+        text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(p2,2),' (≤',round(100*p2),'%)'),cex=2,col='black')
       }
     }
     abline(v=thresh,col='green',lwd=2,lty='dashed')
@@ -444,7 +468,11 @@ binarize_matrix <- function(mat, threshold) {
   # convert to numeric matrix
   mat_num <- as.matrix(mat)
   # apply threshold: binarize methylation data
-  bin_mat <- ifelse(mat_num < threshold, 0, 1)
+  if(length(threshold)>1){
+    bin_mat <- ifelse(mat_num < matrix(threshold,nrow = nrow(mat_num),ncol = ncol(mat_num),byrow = T), 0, 1)
+  }else{
+    bin_mat <- ifelse(mat_num < threshold, 0, 1)
+  }
   return(bin_mat)
 }
 
@@ -784,18 +812,31 @@ if(process){
       thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
     }
     if(thresh.meth=='BM'){
-      thresh=rep(BM.thresh(data.actual.fwd,data.actual.rev),times=ncol(data.actual.rev))
+      thresh=BM.thresh(data.actual.fwd,data.actual.rev)
+      if(var.thresh){
+        threshIrev=rep(NA,times=ncol(data.actual.rev))
+        threshIfwd=threshIrev
+        for(i in 1:length(threshIrev)){
+          threshIrev[i]=BM.thresh(data.actual.fwd[,i],data.actual.rev[,i],set = 'r')
+          threshIfwd[i]=BM.thresh(data.actual.fwd[,i],data.actual.rev[,i],set = 'f')
+        }
+      }
     }
 
-    fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
-    rev.binary <- binarize_matrix(data.actual.rev[,ncol(data.actual.rev):1], thresh)
+    if(!var.thresh){
+      fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
+      rev.binary <- binarize_matrix(data.actual.rev, thresh)
+    }else{
+      fwd.binary <- binarize_matrix(data.actual.fwd, threshIfwd)
+      rev.binary <- binarize_matrix(data.actual.rev, threshIrev)
+    }
   }
   ctrl.binary=rev.binary; ctrl.binary[!is.na(ctrl.binary)]=0
-  ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary,na.rm = T),prob = rep(colSums(rev.binary,na.rm = T)/colSums(!is.na(rev.binary)),times=colSums(!is.na(rev.binary))))]=1
+  ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary==1,na.rm = T))]=1
 
   fwd.binary.surv <- get_survival_data(fwd.binary)
-  rev.binary.surv <- get_survival_data(rev.binary)
-  ctrl.binary.surv <- get_survival_data(ctrl.binary)
+  rev.binary.surv <- get_survival_data(rev.binary[,ncol(rev.binary):1])
+  ctrl.binary.surv <- get_survival_data(ctrl.binary[,ncol(ctrl.binary):1])
 
   fwd.surv.plot <- empirical_survival(fwd.binary.surv$duration)
   rev.surv.plot <- empirical_survival(rev.binary.surv$duration)
@@ -839,8 +880,8 @@ if(process){
     f35m.rev=rep(NA,times=nrow(rev.binary))
     for(i in 1:nrow(rev.binary)){
       if(sum(rev.binary[i,]==1,na.rm = T)>0){
-        f53m.rev[i]=min(which(rev.binary[i,]==1))
-        f35m.rev[i]=max(which(rev.binary[i,]==1))
+        f53m.rev[i]=max(which(rev.binary[i,]==1))
+        f35m.rev[i]=min(which(rev.binary[i,]==1))
       }
     }
     f53m.rev=table(f53m.rev)/sum(!is.na(f53m.rev))
@@ -862,16 +903,20 @@ if(process){
       REV.Cm.pdfs[[i]]=density(data.actual.rev[,i],na.rm = T,from = 0,to = 1)
     }
     plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
+    abline(h=thresh,lty='dashed',col='grey',lwd=2)
     for(i in 1:length(FWD.sites)){
       lines(i-0.725-FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
       lines(i-0.725+FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
       lines(i-0.275-REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
       lines(i-0.275+REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
+      if(var.thresh){
+        lines(i-0.275+c(-1/5,1/5),rep(threshIrev[i],times=2),lwd=4,col='grey')
+        lines(i-0.725+c(-1/5,1/5),rep(threshIfwd[i],times=2),lwd=4,col='grey')
+      }
     }
     points(1:length(FWD.sites)-0.725,apply(data.actual.fwd,2,median,na.rm=T),col='purple',pch='-',cex=5)
     points(1:length(REV.sites)-0.275,apply(data.actual.rev,2,median,na.rm=T),col='purple',pch='-',cex=5)
     axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.6)
-    abline(h=thresh,lty='solid',col='grey',lwd=2)
     legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.2)
     #
     plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main='Methyl Location Distributions',cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
@@ -880,9 +925,9 @@ if(process){
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
     abline(h=read.filt,col='orange',lty='dotted',lwd=2)
     points(c(0:6)*5+0.5,fCpGs.fwd,type='h',pch=22,lwd=15,col=1)
-    points(c(0:6)*5+1.5,rev(fCpGs.rev),type='h',pch=22,lwd=15,col=2)
-    points(c(0:6)*5+2.5,rev(f53m.rev),type='h',pch=22,lwd=15,col=3)
-    points(c(0:6)*5+3.5,rev(f35m.rev),type='h',pch=22,lwd=15,col=4)
+    points(c(0:6)*5+1.5,fCpGs.rev,type='h',pch=22,lwd=15,col=2)
+    points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
+    points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
     text(x=5*length(FWD.sites)-1,y=c(0.72,0.62,0.52),pos = 4,col = c('red','purple','orange'),cex = 1.0,labels = c('% CpG','% Sub.','% Frag.'))
     dev.off()

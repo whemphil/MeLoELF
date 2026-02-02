@@ -19,6 +19,9 @@ MeLoELF(parent,
         methyl.type='B',
         thresh.meth='BM',
         BM.strand.data='r',
+        var.thresh=F,
+        T1.err=0.05,
+        T2.err=0.01,
         target_fwd_auc=0.9,
         read.length=c(10,3000),
         completeness=0.9,
@@ -48,7 +51,10 @@ Defaults:
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
 \item{methyl.type}{A single character string indicating which methyl scores should be used for analysis -- 'M' = methyl, 'H' = hydroxy-methyl, 'B' = both/combined; DEFAULT -- 'B'.}
 \item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning; DEFAULT -- 'BM'.}
-\item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
+\item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' and var.thresh=F -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
+\item{var.thresh}{A logical indicating whether CpG sites should be thresholded individually -- ignored unless pre.ligated=F and thresh.meth='BM'; DEFAULT -- F.}
+\item{T1.err}{A numeric value indicating what type-I error rate should be targeted during mixed beta thresholding if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
+\item{T2.err}{A numeric value indicating what type-II error rate should be targeted during mixed beta thresholding if type-I error rate cannot be estimated and if thresh.meth='BM' -- 0-1; DEFAULT -- 0.01.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- c(10,3000).}
 \item{completeness}{A numeric value indicating the minimum proportion of reference sequence length for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
@@ -85,7 +91,7 @@ Graphs:
 \item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
 \item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
 \item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent REV substrate molecule methylation, and percent of mapped REV fragments passing quality control filtering.}
-\item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced.}
+\item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh=T, then multiple plots will be outputted; first for all rev/target strand scores combined, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands.}
 
 }
 
