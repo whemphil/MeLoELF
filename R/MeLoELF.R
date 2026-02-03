@@ -816,7 +816,9 @@ if(process){
       thresh <- find_thresh_for_auc(data.actual.fwd, data.actual.rev)
     }
     if(thresh.meth=='BM'){
-      thresh=BM.thresh(data.actual.fwd,data.actual.rev)
+      if(var.thresh<2){
+        thresh=BM.thresh(data.actual.fwd,data.actual.rev)
+      }
       if(var.thresh>0){
         threshIrev=rep(NA,times=ncol(data.actual.rev))
         if(var.thresh==2){
@@ -872,7 +874,7 @@ if(process){
   matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv, CTRL = ctrl.binary.surv)
   summary<- data.frame(strand = names(matrices), frac.full, auc, median)
 
-  save(matrices,thresh, file="methylation_matrices.RDS")
+  save(matrices, file="methylation_matrices.RDS")
   write.csv(summary, "survival_summary.csv")
 
   # quality control analyses
@@ -915,7 +917,9 @@ if(process){
       REV.Cm.pdfs[[i]]=density(data.actual.rev[,i],na.rm = T,from = 0,to = 1)
     }
     plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
-    abline(h=thresh,lty='dashed',col='grey',lwd=2)
+    if(var.thresh<2){
+      abline(h=thresh,lty='dashed',col='grey',lwd=2)
+    }
     for(i in 1:length(FWD.sites)){
       lines(i-0.725-FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
       lines(i-0.725+FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
