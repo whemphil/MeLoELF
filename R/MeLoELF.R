@@ -24,9 +24,9 @@ MeLoELF <- function(parent,
                     methyl.type='B',
                     thresh.meth='BM',
                     BM.strand.data='r',
-                    var.thresh=F,
+                    var.thresh=0,
                     T1.err=0.05,
-                    T2.err=0.01,
+                    T2.err=0.05,
                     target_fwd_auc=0.9,
                     read.length=c(10,3000),
                     completeness=0.9,
@@ -236,7 +236,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set
   if(set=='r'){
     data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev>0 & data.actual.rev<1])))
   }
-  #i=2;data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,i]>0 & data.actual.rev[,i]<1,i])))
+  #i=1;data=as.numeric(na.omit(c(data.actual.rev[data.actual.rev[,i]>0 & data.actual.rev[,i]<1,i])))
   fit.dens=density(x = data,na.rm = T,from = 0,to = 1,width = 0.05);fit.dens$y=fit.dens$y/sum(fit.dens$y)/mean(diff(fit.dens$x))
   beta.par.calc <- function(m,s){
     alpha=m*(m*(1-m)/s^2-1)
@@ -357,7 +357,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set
     }
     if(usr.input=='n'){
       thresh=qbeta(p,fit.betasSIN$par[1],fit.betasSIN$par[2])
-      pos.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);pos.dens[neg.dens<0 | fit.dens$x<fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
+      pos.dens=fit.dens$y-dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]);pos.dens[pos.dens<0 | fit.dens$x<fit.dens$x[which.max(dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]))]]=0
       if(sum(pos.dens*mean(diff(fit.dens$x),na.rm=T))>=0.05){
         false.neg=(cumsum(pos.dens)/sum(pos.dens))[which.min(abs(fit.dens$x-thresh))]
         text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*(1-sum(pos.dens*mean(diff(fit.dens$x),na.rm=T)))),'%)'),cex=2,col='black')
@@ -813,21 +813,29 @@ if(process){
     }
     if(thresh.meth=='BM'){
       thresh=BM.thresh(data.actual.fwd,data.actual.rev)
-      if(var.thresh){
+      if(var.thresh>0){
         threshIrev=rep(NA,times=ncol(data.actual.rev))
-        threshIfwd=threshIrev
+        if(var.thresh==2){
+          threshIfwd=threshIrev
+        }
         for(i in 1:length(threshIrev)){
           threshIrev[i]=BM.thresh(data.actual.fwd[,i],data.actual.rev[,i],set = 'r')
-          threshIfwd[i]=BM.thresh(data.actual.fwd[,i],data.actual.rev[,i],set = 'f')
+          if(var.thresh==2){
+            threshIfwd[i]=BM.thresh(data.actual.fwd[,i],data.actual.rev[,i],set = 'f')
+          }
         }
       }
     }
 
-    if(!var.thresh){
+    if(var.thresh==0){
       fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
       rev.binary <- binarize_matrix(data.actual.rev, thresh)
     }else{
-      fwd.binary <- binarize_matrix(data.actual.fwd, threshIfwd)
+      if(var.thresh==2){
+        fwd.binary <- binarize_matrix(data.actual.fwd, threshIfwd)
+      }else{
+        fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
+      }
       rev.binary <- binarize_matrix(data.actual.rev, threshIrev)
     }
   }
@@ -909,9 +917,11 @@ if(process){
       lines(i-0.725+FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
       lines(i-0.275-REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
       lines(i-0.275+REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
-      if(var.thresh){
+      if(var.thresh>0){
         lines(i-0.275+c(-1/5,1/5),rep(threshIrev[i],times=2),lwd=4,col='grey')
-        lines(i-0.725+c(-1/5,1/5),rep(threshIfwd[i],times=2),lwd=4,col='grey')
+        if(var.thresh==2){
+          lines(i-0.725+c(-1/5,1/5),rep(threshIfwd[i],times=2),lwd=4,col='grey')
+        }
       }
     }
     points(1:length(FWD.sites)-0.725,apply(data.actual.fwd,2,median,na.rm=T),col='purple',pch='-',cex=5)
@@ -929,7 +939,7 @@ if(process){
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
-    text(x=5*length(FWD.sites)-1,y=c(0.72,0.62,0.52),pos = 4,col = c('red','purple','orange'),cex = 1.0,labels = c('% CpG','% Sub.','% Frag.'))
+    text(x=5*length(FWD.sites)-1,y=c(0.72,0.62,0.52),pos = 4,col = c('red','purple','orange'),cex = 1.0,labels = paste0(round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Frag.')))
     dev.off()
   }
 
