@@ -908,7 +908,7 @@ if(process){
   #
   if(!pre.ligated){
     png('QCgraphs.png', height = 2650, width = 2800, res=300)
-    par(mfrow=c(2,1),mar=c(3,6,3,1))
+    par(mfrow=c(2,1),mar=c(4,5,3,1))
     #
     FWD.Cm.pdfs=list(NULL)
     REV.Cm.pdfs=list(NULL)
@@ -934,9 +934,12 @@ if(process){
     }
     points(1:length(FWD.sites)-0.725,apply(data.actual.fwd,2,median,na.rm=T),col='purple',pch='-',cex=5)
     points(1:length(REV.sites)-0.275,apply(data.actual.rev,2,median,na.rm=T),col='purple',pch='-',cex=5)
-    axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.6)
-    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.2)
+    axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.2)
+    axis(side = 1,at = c(1:length(FWD.sites))-0.725,labels = paste0(round(colSums(!is.na(data.actual.fwd))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'blue')
+    axis(side = 1,at = c(1:length(FWD.sites))-0.275,labels = paste0(round(colSums(!is.na(data.actual.rev))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'red')
+    legend('topright',legend = c('SYNTH','CAT'),col = c('blue','red'),fill = c('blue','red'),cex=1.1)
     #
+    par(mar=c(3,5,3,1))
     plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main='Methyl Location Distributions',cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
     axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
@@ -957,7 +960,7 @@ if(process){
   png(paste0(wd, "/methylation_survival.png"), height = 1320, width = 2800, res=300)
   par(mfrow=c(1,1),mar=c(5,6,3,8))
   plot(0, 0, type="n", xlim=c(0,1), ylim=c(0,100),
-       xlab="Probability of successive methylation", ylab="Percentage of reads",
+       xlab="Survival score", ylab="Percent of reads",
        main=paste(plot_title, " - Methylation survival"), cex.main = 2, cex.axis=2, cex.lab = 2)
   #main=expression(paste(Delta, "351 - Methylation survival")), cex.axis=1.2, cex.lab = 1.3)
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
