@@ -833,7 +833,7 @@ if(process){
       }
     }
 
-    if(var.thresh==0){
+    if(var.thresh==0 | thresh.meth=='AUC'){
       fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
       rev.binary <- binarize_matrix(data.actual.rev, thresh)
     }else{
@@ -917,7 +917,7 @@ if(process){
       REV.Cm.pdfs[[i]]=density(data.actual.rev[,i],na.rm = T,from = 0,to = 1)
     }
     plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
-    if(var.thresh<2){
+    if(var.thresh<2 | thresh.meth=='AUC'){
       abline(h=thresh,lty='dashed',col='grey',lwd=2)
     }
     for(i in 1:length(FWD.sites)){
@@ -925,7 +925,7 @@ if(process){
       lines(i-0.725+FWD.Cm.pdfs[[i]][['y']]/max(FWD.Cm.pdfs[[i]][['y']])*0.2,FWD.Cm.pdfs[[i]][['x']],col='blue')
       lines(i-0.275-REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
       lines(i-0.275+REV.Cm.pdfs[[i]][['y']]/max(REV.Cm.pdfs[[i]][['y']])*0.2,REV.Cm.pdfs[[i]][['x']],col='red')
-      if(var.thresh>0){
+      if(var.thresh>0 & thresh.meth=='BM'){
         lines(i-0.275+c(-1/5,1/5),rep(threshIrev[i],times=2),lwd=4,col='grey')
         if(var.thresh==2){
           lines(i-0.725+c(-1/5,1/5),rep(threshIfwd[i],times=2),lwd=4,col='grey')
