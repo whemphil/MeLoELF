@@ -17,7 +17,8 @@ MeLoELF <- function(parent,
                     FWD.sites,
                     REV.sites,
                     mdir=getwd(),
-                    sam.file=list.files(path = mdir,pattern = '*.sam'),
+                    sam.file='auto',
+                    sam.indices=c(10,33,34),
                     crunch.too=T,
                     process=T,
                     pre.ligated=F,
@@ -336,11 +337,11 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set
   if(sBIC<dBIC | dBeta.share>=0.5 | abs(0.5-fit.betas$par[5])>0.4 | mode.diff<=0.1){
     plot(fit.dens,ylim=c(0,max(fit.dens$y)),main='Beta Unmixing Threshold',xlab='Methyl Score');lines(fit.dens$x,dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),col='red')
     show('WARNING! -- Methyl score values appear to primarily belong to a single distribution, and its corresponding methylation state is needed for thresholding -- attempting auto-assignment...')
-    if(fit.dens$x[which.max(fit.dens$y)]>=0.33){
+    if(fit.dens$x[which.max(fit.dens$y)]>=0.3){
       usr.input='p'
       show('...distribution inferred to correspond to methylated CpGs.')
     }else{
-      if(fit.dens$x[which.max(fit.dens$y)]<=0.15){
+      if(fit.dens$x[which.max(fit.dens$y)]<=0.1){
         usr.input='n'
         show('...distribution inferred to correspond to unmethylated CpGs.')
       }else{
@@ -577,9 +578,14 @@ if(crunch.too){
   show(paste0('Align Start:  ',Sys.time()))
 
   # process relevant sam file information into individual txt files using bash/awk
-  try(system(paste0("awk '{print $10}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
-  try(system(paste0("awk '{print $28}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
-  try(system(paste0("awk '{print $29}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+  if(sam.file=='auto'){
+    sam.file=list.files(path = mdir,pattern = '*.sam')
+  }
+  if(!is.null(sam.file) & length(sam.file)>0){
+    try(system(paste0("awk '{print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
+    try(system(paste0("awk '{print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
+    try(system(paste0("awk '{print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+  }
   #
   raw=read.csv(file = seq.file,header = F) # load sequences from pre-processed file
   raw.2=as.matrix(read.csv(melo.file,header = F,sep = ";")[,]) # load CpG indices from pre-processed file
@@ -806,6 +812,9 @@ if(process){
     if(thresh.meth=='BM'){
       thresh=BM.thresh(polymer.actual.fwd,polymer.actual.rev)
     }
+    if(is.numeric(thresh.meth)){
+      thresh=thresh.meth
+    }
 
     fwd.binary <- binarize_matrix(polymer.actual.fwd, thresh)
     rev.binary <- binarize_matrix(polymer.actual.rev, thresh)
@@ -832,8 +841,11 @@ if(process){
         }
       }
     }
+    if(is.numeric(thresh.meth)){
+      thresh=thresh.meth
+    }
 
-    if(var.thresh==0 | thresh.meth=='AUC'){
+    if(var.thresh==0 | thresh.meth=='AUC' | is.numeric(thresh.meth)){
       fwd.binary <- binarize_matrix(data.actual.fwd, thresh)
       rev.binary <- binarize_matrix(data.actual.rev, thresh)
     }else{
@@ -879,7 +891,8 @@ if(process){
 
   # quality control analyses
   if(!pre.ligated){
-    read.filt=nrow(data.actual.rev)/sum(rowSums(!is.na(REV.Cm[,rev(REV.sites)]))>0,na.rm = T)
+    read.filt=nrow(data.actual.rev)/sum(Q.reads[,3]=='REV',na.rm = T)
+    read.filt.fwd=nrow(data.actual.fwd)/sum(Q.reads[,3]=='FWD',na.rm = T)
     fNA.fwd=colSums(is.na(fwd.binary))/nrow(fwd.binary)
     fNA.rev=colSums(is.na(rev.binary))/nrow(rev.binary)
     fCpGs.fwd=colSums(fwd.binary,na.rm = T)/colSums(!is.na(fwd.binary))
@@ -950,7 +963,7 @@ if(process){
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
-    text(x=5*length(FWD.sites)-1,y=c(0.72,0.62,0.52),pos = 4,col = c('red','purple','orange'),cex = 1.0,labels = paste0(round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Frag.')))
+    text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     dev.off()
   }
 

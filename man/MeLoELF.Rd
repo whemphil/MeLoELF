@@ -12,7 +12,8 @@ MeLoELF(parent,
         FWD.sites,
         REV.sites,
         mdir=getwd(),
-        sam.file=list.files(path = mdir,pattern = '*.sam'),
+        sam.file='auto',
+        sam.indices=c(10,33,34),
         crunch.too=T,
         process=T,
         pre.ligated=F,
@@ -46,11 +47,12 @@ Defaults:
 
 \item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
 \item{sam.file}{A single character string indicating the filename for the input sam file containing the Nanopore sequencing data; DEFAULT -- searches mdir directory for sam file.}
+\item{sam.indices}{A numeric vector of length three indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively; DEFAULT -- c(10,33,34)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
 \item{methyl.type}{A single character string indicating which methyl scores should be used for analysis -- 'M' = methyl, 'H' = hydroxy-methyl, 'B' = both/combined; DEFAULT -- 'B'.}
-\item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning; DEFAULT -- 'BM'.}
+\item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used, or a single numeric value indicating the desired value for manual thresholding -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning, 0-1 = manual thresholding; DEFAULT -- 'BM'.}
 \item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' and var.thresh<2 (ignored for thresholding purposes if var.thresh=2) -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
 \item{var.thresh}{A numeric value indicating whether CpG sites should be thresholded individually (ignored unless pre.ligated=F and thresh.meth='BM') -- 0 = no individual site thresholding, 1 = individual thresholding for rev/target strand sites only, 2 = individual thresholding for all sites; DEFAULT -- 0.}
 \item{T1.err}{A numeric value indicating what type-I error rate should be targeted during mixed beta thresholding if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
