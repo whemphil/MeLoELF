@@ -18,7 +18,7 @@ MeLoELF <- function(parent,
                     REV.sites,
                     mdir=getwd(),
                     sam.file='auto',
-                    sam.indices=c(10,33,34),
+                    sam.indices=c(10,33,34,0),
                     crunch.too=T,
                     process=T,
                     pre.ligated=F,
@@ -364,7 +364,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set
         text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*(1-sum(pos.dens*mean(diff(fit.dens$x),na.rm=T)))),'%)'),cex=2,col='black')
         text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(false.neg,2),' (',round(100*false.neg*sum(pos.dens*mean(diff(fit.dens$x),na.rm=T))),'%)'),cex=2,col='black')
         lines(fit.dens$x,pos.dens,lty='dotted',col='purple',lwd=2)
-        lines(fit.dens$x,(1-sum(pos.dens,na.rm = T))*dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),lty='dotted',col='purple',lwd=2)
+        lines(fit.dens$x,(1-mean(diff(fit.dens$x),na.rm=T)*sum(pos.dens,na.rm = T))*dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),lty='dotted',col='purple',lwd=2)
       }else{
         text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (≤',round(100*(1-p)),'%)'),cex=2,col='black')
         text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ','n.d.',' (','≤5','%)'),cex=2,col='black')
@@ -377,7 +377,7 @@ BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set
         text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ',round(1-p,2),' (',round(100*(1-p)*sum(neg.dens*mean(diff(fit.dens$x),na.rm=T))),'%)'),cex=2,col='black')
         text(x=1,y=0.75*max(fit.dens$y),pos=2,labels=paste0('T2 ≈ ',round(pbeta(thresh,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),2),' (',round(100*pbeta(thresh,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2])*(1-sum(neg.dens*mean(diff(fit.dens$x),na.rm=T)))),'%)'),cex=2,col='black')
         lines(fit.dens$x,neg.dens,lty='dotted',col='purple',lwd=2)
-        lines(fit.dens$x,(1-sum(neg.dens,na.rm = T))*dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),lty='dotted',col='purple',lwd=2)
+        lines(fit.dens$x,(1-mean(diff(fit.dens$x),na.rm=T)*sum(neg.dens,na.rm = T))*dbeta(fit.dens$x,shape1 = fit.betasSIN$par[1],shape2 = fit.betasSIN$par[2]),lty='dotted',col='purple',lwd=2)
       }else{
         thresh=qbeta(p2,fit.betasSIN$par[1],fit.betasSIN$par[2])
         text(x=1,y=0.85*max(fit.dens$y),pos=2,labels=paste0('T1 ≈ ','n.d.',' (','≤5','%)'),cex=2,col='black')
@@ -582,9 +582,10 @@ if(crunch.too){
     sam.file=list.files(path = mdir,pattern = '*.sam')
   }
   if(!is.null(sam.file) & length(sam.file)>0){
-    try(system(paste0("awk '{print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
-    try(system(paste0("awk '{print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
-    try(system(paste0("awk '{print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+    # awk '{for(j=1;j<=NF;j++){if($j~/^/){print $j}}}'
+    try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
+    try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
+    try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
   }
   #
   raw=read.csv(file = seq.file,header = F) # load sequences from pre-processed file

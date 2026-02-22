@@ -13,7 +13,7 @@ MeLoELF(parent,
         REV.sites,
         mdir=getwd(),
         sam.file='auto',
-        sam.indices=c(10,33,34),
+        sam.indices=c(10,33,34,0),
         crunch.too=T,
         process=T,
         pre.ligated=F,
@@ -47,7 +47,7 @@ Defaults:
 
 \item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
 \item{sam.file}{A single character string indicating the filename for the input sam file containing the Nanopore sequencing data; DEFAULT -- searches mdir directory for sam file.}
-\item{sam.indices}{A numeric vector of length three indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively; DEFAULT -- c(10,33,34)}
+\item{sam.indices}{A numeric vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of sam file header lines to skip; DEFAULT -- c(10,33,34,0)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
@@ -70,6 +70,8 @@ Defaults:
 }
 
 \details{
+
+{sam.file} -- {If sam.file is set to NULL, or if no sam file is found by auto-search, then the working directory will be searched to directly load seq.file, melo.file, and meca.file.}
 
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
