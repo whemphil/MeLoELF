@@ -97,6 +97,7 @@ Graphs:
 \item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
 \item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
 \item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent REV substrate molecule methylation, and percent of mapped REV fragments passing quality control filtering.}
+\item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }

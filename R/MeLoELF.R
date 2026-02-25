@@ -558,6 +558,21 @@ row_sum_counts <- function(mat) {
   return(df)
 }
 
+# position scoring for mapped fragments
+pos.score <- function(indexes,n,k){
+  data=indexes;data[indexes<=0]=NA
+  midpoint=apply(data,1,median,na.rm=T)
+  score=cbind(midpoint/n,(n/2-abs(n/2-midpoint))/k,midpoint/k,(midpoint-n)/k,(midpoint-n/2)/k)
+  return(score)
+}
+
+# probability density function maker
+pdf.make <- function(data){
+  tmp1=density(data,na.rm = T)
+  tmp1$y=tmp1$y/sum(mean(diff(tmp1$x))*tmp1$y)
+  return(tmp1)
+}
+
 # Save relevant parameters
 PAR.list=ls()
 
@@ -671,6 +686,8 @@ if(process){
   Q.reads=matrix(NA,nrow=DATA[['N']],ncol = 4); colnames(Q.reads)<-c('comp','match','id','polyN')
   FWD.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.index)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
   REV.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.index)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
+  FragPos.fwd=data.frame('rloc'=rep(NA,times=DATA[['N']]),'ends'=rep(NA,times=DATA[['N']]),'5p'=rep(NA,times=DATA[['N']]),'3p'=rep(NA,times=DATA[['N']]),'mid'=rep(NA,times=DATA[['N']]))
+  FragPos.rev=data.frame('rloc'=rep(NA,times=DATA[['N']]),'ends'=rep(NA,times=DATA[['N']]),'5p'=rep(NA,times=DATA[['N']]),'3p'=rep(NA,times=DATA[['N']]),'mid'=rep(NA,times=DATA[['N']]))
   remapped.reads=as.data.frame(matrix(NA,nrow=length(DATA[['RSs']]),ncol=4)); colnames(remapped.reads) <- c('Length','Strand','Mcomp','Mmatch')
   COUNTER=1
 
@@ -687,9 +704,11 @@ if(process){
     REV.Cm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['REV.Cm']]
     Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),1:3]=DATA[[i]][['Q']]
     Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),4]=i
+    FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
+    REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
+    FragPos.fwd[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=pos.score(abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']]),DATA[['RLs']][i],length(DATA[['FWD']]))
+    FragPos.rev[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=pos.score(abs(DATA[[i]][['REV.I']])-length(DATA[['REV']]),DATA[['RLs']][i],length(DATA[['REV']]))
     if(pre.ligated){
-      FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
-      REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
       remapped.reads$Length[i]=DATA[['RLs']][i]
       remapped.reads$Mcomp[i]=mean(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
       remapped.reads$Mmatch[i]=mean(as.numeric(DATA[[i]]$Q[,2]),na.rm = T)
@@ -706,10 +725,8 @@ if(process){
     COUNTER=COUNTER+nrow(DATA[[i]]$Q)
 
   }
-  if(pre.ligated){
-    FWD.index[FWD.index<0]=NA
-    REV.index[REV.index<0]=NA
-  }
+  FWD.index[FWD.index<0]=NA
+  REV.index[REV.index<0]=NA
 
   if(pre.ligated){
 
@@ -771,6 +788,8 @@ if(process){
     FWD.Cm.pruned=FWD.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
     REV.Chm.pruned=REV.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
     REV.Cm.pruned=REV.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
+    FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),]
+    FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),]
   }
 
   # calculate total methylation data
@@ -965,6 +984,43 @@ if(process){
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+    #
+    dev.off()
+    #
+    #
+    png('QCgraphsB.png', height = 2650, width = 2800, res=300)
+    #
+    f=1
+    par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = 'Fragment Positions: Relative to Read')
+    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
+    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    legend('topright',legend = c('Both','FWD','REV'),fill = c('black','red','green'),col=c('black','red','green'),bty = 'n')
+    #
+    par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=TRUE)
+    f=2
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'Fragment Positions: From Nearest Edge')
+    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
+    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    #
+    par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=TRUE)
+    f=3
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 5' End")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
+    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    #
+    par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=TRUE)
+    f=4
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 3' End")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
+    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    #
+    par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=TRUE)
+    f=5
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From Read Center")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
+    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    #
     dev.off()
   }
 
