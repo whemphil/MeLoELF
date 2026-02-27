@@ -82,11 +82,11 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     return(results)
   }
 
-  test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
-  lengths.of.reads=length(test.0)
-  if((length(Cm)+length(Chm))!=length(C.key) | length(test.0)<min(read.length) | length(test.0)>max(read.length)){
+  if((length(Cm)+length(Chm))!=length(C.key) | nchar(read)<min(read.length) | nchar(read)>max(read.length)){
     DATA='blank' # bypasses polymers outside desired length range
   } else {
+    test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
+    lengths.of.reads=length(test.0)
     test.Chm=rep(NA,times=length(test.0)) # creates temporary  vector to store hydroxy methyl scores for polymer, with NA as default value
     test.Cm=test.Chm
     test.Chm[which(test.0=='C')] = 0 # sets the default methylation score for all Cs in the polymer to zero
@@ -598,7 +598,6 @@ if(crunch.too){
     sam.file=list.files(path = mdir,pattern = '*.sam')
   }
   if(!is.null(sam.file) & length(sam.file)>0){
-    # awk '{for(j=1;j<=NF;j++){if($j~/^/){print $j}}}'
     try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
     try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
     try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
@@ -624,10 +623,6 @@ if(crunch.too){
     Cm[[i]]=cumsum(Cm[[i]]+1)
   }
 
-  # create empty variables for data storage and indexing
-  READS=0
-  lengths.of.reads=rep(NA,times=nrow(raw))
-
   # loop to perform parallelized alignments with scoring on a per-read basis
   registerDoParallel(detectCores())
   DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
@@ -636,17 +631,10 @@ if(crunch.too){
 
   }
   # get lengths of reads
-  lengths.of.reads <- foreach(seq = 1:nrow(raw),.combine = c) %dopar% {
+  lengths.of.reads <- nchar(raw$V1)
 
-    length(str_extract_all(raw[seq,1],boundary("character"))[[1]])
-
-  }
   # get fragment numbers
-  READS <- foreach(seq = 1:nrow(raw),.combine = c) %dopar% {
-
-    round(length(str_extract_all(raw[seq,1],boundary("character"))[[1]])/length(FWD)+0.4)+padding
-
-  }
+  READS <- round(nchar(raw$V1)/length(FWD)+0.4)+padding
 
   # add final useful data to end of stable variable
   DATA[['N']]=sum(as.numeric(READS[lengths.of.reads>=read.length[1] & lengths.of.reads<=read.length[2]]))

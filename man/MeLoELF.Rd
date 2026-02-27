@@ -55,7 +55,7 @@ Defaults:
 \item{T2.err}{A numeric value indicating what type-II error rate should be targeted during mixed beta thresholding if type-I error rate cannot be estimated and if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- c(10,3000).}
-\item{read.length}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
+\item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
 \item{completeness}{A numeric value indicating the minimum proportion of reference sequence length for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
@@ -84,18 +84,21 @@ Summary of MeLoELF-seq Analysis Pipeline
 STEP 1:	Basecalling
 
 POD5 files containing raw signal data are basecalled via ONTs Dorado v1.4.0 software.
+
 user$ ~/dorado-1.4.0-linux-x64/bin/dorado basecaller sup,5mCG_5hmCG pod5/ --kit-name SQK-NBD114-24 > bam/combined.bam
 
 
 STEP 2:	Subsetting
 
 The combined BAM output file is sorted into individual sequencing sample BAM files via barcodes with Dorado.
+
 user$ ~/dorado-1.4.0-linux-x64/bin/dorado demux -o bam/ --no-classify bam/combined.bam
 
 
 STEP 3:	BAM-to-SAM File Conversion
 
 Individual BAM files are converted to SAM files with Samtools.
+
 user$ samtools view file.bam > file.sam
 
 
