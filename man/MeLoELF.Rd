@@ -1,11 +1,6 @@
 \name{MeLoELF}
 \alias{MeLoELF}
 \title{Analysis of MeLoELF-seq Data}
-\description{
-Function to map and computationally deconstruct end-ligated frament sequences, parse their methylation states, and analyze enzyme activity and processivity.
-
-Designed and optimized for Unix machines -- may return errors on Windows PCs.
-}
 \usage{
 MeLoELF(parent,
         target,
@@ -77,36 +72,12 @@ Defaults:
 
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
 
-}
-
-\value{
-
-Files:
-
-\item{sequences.txt}{A txt file containing the Nanopore read sequences parsed from the input sam file.}
-\item{methlocations.txt}{A txt file containing the Nanopore read C-methylation indices parsed from the input sam file.}
-\item{methcalls.txt}{A txt file containing the Nanopore read C-methyl scores parsed from the input sam file.}
-\item{align.RData}{A compressed R data file containing all relevant variables created as part of the pre-analysis fragment mapping and methylation score assignment.}
-\item{processed.RData}{A compressed R data file containing the processed matrices of FWD and REV mapped fragments' methyl scores that passed quality filtering.}
-\item{methylation_matrices.RDS}{A compressed R data file containing the selected threshold value for methyl score binarization, and containing the data frames with survival data for the FWD, REV, and simulated control fragments.}
-\item{survival_summary.csv}{A csv file providing brief summary statistics for the survival data for the FWD, REV, and simulated control fragment data, such as their respective survival plot AUCs.}
-\item{revbinary.csv}{A csv file containing the binarized matrix of mapped REV fragments' methylation states.}
-
-Graphs:
-
-\item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
-\item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
-\item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent REV substrate molecule methylation, and percent of mapped REV fragments passing quality control filtering.}
-\item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
-\item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
-
-}
-
-\examples{
+---------
+---------
 
 Summary of MeLoELF-seq Analysis Pipeline
 
-=========
+======
 
 STEP 1:	Basecalling
 
@@ -146,23 +117,51 @@ In our MeLoELF experiments, product ligations produce oligomers with an average 
 
 Phase 3:  Data Consolidation and Fragment Quality Filtering
 Data are re-organized into consolidated data frames containing extracted fragment information across all reads. Initially, data frames contain information of all “extracted” fragments, no matter how poor their complementarity to the reference sequence may be. Before subsequent analyses, extracted fragments may be filtered out according to their completeness and matching quality metrics from phase 2 (set by parameters of the same name). In addition, their ML:B:C data are pruned to only include 5mC scores, 5hmC scores, or the sum of those scores (set by the methyl.type parameter).
+Methylation score data frames are column-pruned to isolate only the CpG sites of interest (set by FWD.sites and REV.sites parameters), and REV/target fragment data frames are column-reversed to complement their FWD counterparts.
 
 Phase 4:  Methyl Score Thresholding
 MeLoELF offers three approaches for binarizing methyl score data (set by the thresh.meth parameter) into C vs. 5(h)mC predictions: Area Under Curve (AUC) optimization, Beta unmixing (BM), and manual selection. BM is the MeLoELF default.
-AUC thresholding operates under the assumption that the reaction substrate pre-sequencing was hemi-methylated, with the FWD/parent strand having a known, pre-existing methylation pattern. It scales a single threshold value down, iteratively checking the subsequent survival analysis’s AUC metric (see phase 5) until it reaches a certain value on the FWD strands (set by the target_fwd_auc parameter; 0.9 by default). That threshold is then applied to all sites.
+AUC thresholding operates under the assumption that the reaction substrate pre-sequencing was hemi-methylated, with the FWD/parent fragments having a known, pre-existing methylation pattern. It scales a single threshold value down, iteratively checking the subsequent survival analysis’s AUC metric (see phase 5) until it reaches a certain value on the FWD fragments (set by the target_fwd_auc parameter; 0.9 by default). That threshold is then applied to all sites.
 BM thresholding works by separating (or pooling entirely) methyl scores into comparable groups based on their substrate strand and/or CpG site (set by the BM.strand.data and var.thresh parameters), then fitting the methyl score distributions with mixed beta probability density functions. It operates under the assumption that the lower and upper distributions correspond to negative/unmethylated and positive/methylated sites, respectively.
 Once the data have been fit to the mixed beta distribution, the lower/unmethylated distribution is isolated and a threshold set that aims to control for type-I error (set by T1.err parameter).
 In the event that a methyl score distribution is found to be best fit by a single beta distribution, its identity is inferred from the distribution’s mode if it’s sufficiently extreme, or from the relative position of unexplained distribution density in the case of more ambiguous distributions. For single, negative distributions, thresholding is set by controlling for type-I error as described above. For single, positive distributions, thresholding is instead set by controlling for type-II error rate (set by the T2.err parameter).
 In the case of a manual thresholding override, the methyl scores of all sites and strands are binarized from a single, provided value.
 
 Phase 5:  Methylation State Analyses
-Methylation data frames are column-pruned to isolate only the CpG sites of interest (set by FWD.sites and REV.sites parameters), and REV/target strand data frames are column-reversed to complement their FWD counterparts.
 The first analysis output file, QCgraphs, contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), and FWD and REV fragments passing quality filtering (“Qual.”).
 The second analysis output file, QCgraphsB, contains distribution plots of mapped fragment positions (that pass quality filtering). The metrics for fragment position are “Relative to Read”, which plots location of the fragment’s center relative to its parent read length, “From Nearest Edge”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from its parent read’s closest 5’ or 3’ end, “From 5’/3’ End”, which plot the same metric but from a specific parent read end, and “From Read Center”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from the center of its parent read. Probability density functions are provided for both the combined and separate FWD and REV fragment positional data.
 The third analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
 The fourth analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
 
+}
 
+\value{
+
+Files:
+
+\item{sequences.txt}{A txt file containing the Nanopore read sequences parsed from the input sam file.}
+\item{methlocations.txt}{A txt file containing the Nanopore read C-methylation indices parsed from the input sam file.}
+\item{methcalls.txt}{A txt file containing the Nanopore read C-methyl scores parsed from the input sam file.}
+\item{align.RData}{A compressed R data file containing all relevant variables created as part of the pre-analysis fragment mapping and methylation score assignment.}
+\item{processed.RData}{A compressed R data file containing the processed matrices of FWD and REV mapped fragments' methyl scores that passed quality filtering.}
+\item{methylation_matrices.RDS}{A compressed R data file containing the selected threshold value for methyl score binarization, and containing the data frames with survival data for the FWD, REV, and simulated control fragments.}
+\item{survival_summary.csv}{A csv file providing brief summary statistics for the survival data for the FWD, REV, and simulated control fragment data, such as their respective survival plot AUCs.}
+\item{revbinary.csv}{A csv file containing the binarized matrix of mapped REV fragments' methylation states.}
+
+Graphs:
+
+\item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
+\item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
+\item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent REV substrate molecule methylation, and percent of mapped REV fragments passing quality control filtering.}
+\item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
+\item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
+
+}
+
+\description{
+Function to map and computationally deconstruct end-ligated frament sequences, parse their methylation states, and analyze enzyme activity and processivity.
+
+Designed and optimized for Unix machines -- may return errors on Windows PCs.
 }
 
 
