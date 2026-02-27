@@ -75,13 +75,13 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     if(sum(s1>1)==0){
       return(NULL)
     }
-    s2=range(which(s1>1))
+    s2=range(which(s1>1 & data))
     results=rep(F,times=length(data))
     results[s2[1]:s2[2]]=T
     return(results)
   }
 
-  test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per value
+  test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
   lengths.of.reads=length(test.0)
   if((length(Cm)+length(Chm))!=length(C.key) | length(test.0)<min(read.length) | length(test.0)>max(read.length)){
     DATA='blank' # bypasses polymers outside desired length range

@@ -20,7 +20,7 @@ MeLoELF(parent,
         methyl.type='B',
         thresh.meth='BM',
         BM.strand.data='r',
-        var.thresh=F,
+        var.thresh=0,
         T1.err=0.05,
         T2.err=0.05,
         target_fwd_auc=0.9,
@@ -101,4 +101,69 @@ Graphs:
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }
+
+\examples{
+
+Summary of MeLoELF-seq Analysis Pipeline
+
+=========
+
+STEP 1:	Basecalling
+
+POD5 files containing raw signal data are basecalled via ONTs Dorado v1.4.0 software.
+user$ ~/dorado-1.4.0-linux-x64/bin/dorado basecaller sup,5mCG_5hmCG pod5/ --kit-name SQK-NBD114-24 > bam/combined.bam
+
+
+STEP 2:	Subsetting
+
+The combined BAM output file is sorted into individual sequencing sample BAM files via barcodes with Dorado.
+user$ ~/dorado-1.4.0-linux-x64/bin/dorado demux -o bam/ --no-classify bam/combined.bam
+
+
+STEP 3:	BAM-to-SAM File Conversion
+
+Individual BAM files are converted to SAM files with Samtools.
+user$ samtools view file.bam > file.sam
+
+
+STEP 4:	MeLoELF Analysis
+
+GitHub Repository:	www.github.com/whemphil/MeLoELF
+
+MeLoELF is an R package for parsing the sequence, 5mC/5hmC score, and 5mC/5hmC location data provided within Dorado-basecalled SAM files, and analyzing the methylation states of the individual substrate molecules that compose the sequenced polymers.
+MeLoELF was coded in R v4.5.2 on MacOS, with Unix machines in mind. Function parameters and data structures were designed for optimal analysis of enzymes acting on hemimethylated substrates, like DNMT1, but are generally applicable for de novo methylases as well.
+MeLoELF analysis can be divided into five general phases.
+
+Phase 1:  SAM File Parsing
+The SAM file (identified by the mdir and sam.file parameters) is parsed with “awk” via system/bash invocation to extract the data columns corresponding to read sequences, MM:Z methyl locations/indices, and ML:B:C 5mC/5mhC scores (identified by the sam.indices parameter). For each read, the sequence information is converted to a character vector, and methyl and hydroxy-methyl score vectors of equal lengths are prepared. Default scores are set to zero for “C” basecalls and NA otherwise, then base indices implicated by the MM:Z values are updated with the corresponding ML:B:C scores. Finally, the ML:B:C scores, which are reported on a 0-256 integer scale in SAM files, are normalized to a 0-1 scale.
+These three aligned vectors for each read are used in phase 2.
+
+Phase 2:  Fragment Mapping and Extraction
+The original, complementary substrate sequences (identified by parent and target parameters) are each slid across the entire read sequence, and the fraction of matching bases calculated for every possible alignment position with each reference sequence. In order of decreasing reference-read complementarity, fragments are “extracted” from the read and recorded into data frames, along with their corresponding methyl score information, position within the read, and read number. This continues within recurring sliding alignments until the entire read sequence has been “extracted”, or the number of extracted fragments reaches a padded estimate of how many substrate repeats the oligomeric read should contain.
+For cases of partial read-reference complementarity, fragments are “trimmed” to the most 5’ and 3’ base-matches that have a directly adjacent base match, and only information within those indices is “extracted” from the parent read. Consequently, fragments with sequence insertions/deletions are initially recorded as separate, partial fragments in the data frame, though their read position data allows for recombination later.
+For each extracted fragment, two quality parameters are calculated. Completeness, which indicates the length of each extracted fragment relative to the reference sequence length, and matching, which indicates the proportion of bases within the extracted fragment that match their positional counterparts in the reference sequence.
+In our MeLoELF experiments, product ligations produce oligomers with an average of ~6 fragments (~240 bases). However, in a fraction of a percent of SAM file entries, erroneous reads appear that can be hundreds or more times longer than the median read length. To avoid unnecessarily inflating computational time, and because these reads are a minority that likely represent sequencing artifacts rather than physical polymer sizes, reads outside a certain size range (set by the read.length parameter) are skipped entirely.
+
+Phase 3:  Data Consolidation and Fragment Quality Filtering
+Data are re-organized into consolidated data frames containing extracted fragment information across all reads. Initially, data frames contain information of all “extracted” fragments, no matter how poor their complementarity to the reference sequence may be. Before subsequent analyses, extracted fragments may be filtered out according to their completeness and matching quality metrics from phase 2 (set by parameters of the same name). In addition, their ML:B:C data are pruned to only include 5mC scores, 5hmC scores, or the sum of those scores (set by the methyl.type parameter).
+
+Phase 4:  Methyl Score Thresholding
+MeLoELF offers three approaches for binarizing methyl score data (set by the thresh.meth parameter) into C vs. 5(h)mC predictions: Area Under Curve (AUC) optimization, Beta unmixing (BM), and manual selection. BM is the MeLoELF default.
+AUC thresholding operates under the assumption that the reaction substrate pre-sequencing was hemi-methylated, with the FWD/parent strand having a known, pre-existing methylation pattern. It scales a single threshold value down, iteratively checking the subsequent survival analysis’s AUC metric (see phase 5) until it reaches a certain value on the FWD strands (set by the target_fwd_auc parameter; 0.9 by default). That threshold is then applied to all sites.
+BM thresholding works by separating (or pooling entirely) methyl scores into comparable groups based on their substrate strand and/or CpG site (set by the BM.strand.data and var.thresh parameters), then fitting the methyl score distributions with mixed beta probability density functions. It operates under the assumption that the lower and upper distributions correspond to negative/unmethylated and positive/methylated sites, respectively.
+Once the data have been fit to the mixed beta distribution, the lower/unmethylated distribution is isolated and a threshold set that aims to control for type-I error (set by T1.err parameter).
+In the event that a methyl score distribution is found to be best fit by a single beta distribution, its identity is inferred from the distribution’s mode if it’s sufficiently extreme, or from the relative position of unexplained distribution density in the case of more ambiguous distributions. For single, negative distributions, thresholding is set by controlling for type-I error as described above. For single, positive distributions, thresholding is instead set by controlling for type-II error rate (set by the T2.err parameter).
+In the case of a manual thresholding override, the methyl scores of all sites and strands are binarized from a single, provided value.
+
+Phase 5:  Methylation State Analyses
+Methylation data frames are column-pruned to isolate only the CpG sites of interest (set by FWD.sites and REV.sites parameters), and REV/target strand data frames are column-reversed to complement their FWD counterparts.
+The first analysis output file, QCgraphs, contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), and FWD and REV fragments passing quality filtering (“Qual.”).
+The second analysis output file, QCgraphsB, contains distribution plots of mapped fragment positions (that pass quality filtering). The metrics for fragment position are “Relative to Read”, which plots location of the fragment’s center relative to its parent read length, “From Nearest Edge”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from its parent read’s closest 5’ or 3’ end, “From 5’/3’ End”, which plot the same metric but from a specific parent read end, and “From Read Center”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from the center of its parent read. Probability density functions are provided for both the combined and separate FWD and REV fragment positional data.
+The third analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+The fourth analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
+
+
+}
+
+
 
