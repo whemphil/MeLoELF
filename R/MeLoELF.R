@@ -30,6 +30,7 @@ MeLoELF <- function(parent,
                     T2.err=0.05,
                     target_fwd_auc=0.9,
                     read.length=c(10,3000),
+                    padding=2,
                     completeness=0.9,
                     matching=0.9,
                     align.file='align.RData',
@@ -72,10 +73,10 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
       return(results)
     }
     s1=slideSum(as.integer(data))
-    if(sum(s1>1)==0){
+    if(sum(s1>1 & as.numeric(data))==0){
       return(NULL)
     }
-    s2=range(which(s1>1 & data))
+    s2=range(which(s1>1 & as.numeric(data)))
     results=rep(F,times=length(data))
     results[s2[1]:s2[2]]=T
     return(results)
@@ -103,7 +104,7 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     score.FWD=rep(0,times=length(test.1)+1-length(FWD)) # creates temporary vectors to hold the alignment scores for the FWD and REV sequences to the reference polymer
     score.REV=rep(0,times=length(test.1)+1-length(REV))
 
-    NN=round(length(test.0)/length(FWD)+0.4)+2 # sets the maximum number of fragments allowed to be mapped to the polymer
+    NN=round(length(test.0)/length(FWD)+0.4)+padding # sets the maximum number of fragments allowed to be mapped to the polymer
     FWD.mat=matrix(FWD,nrow=NN,ncol = length(FWD),byrow = T)
     REV.mat=matrix(REV,nrow=NN,ncol = length(REV),byrow = T)
     FWD.align=matrix('x',nrow=NN,ncol = length(FWD)); colnames(FWD.align)<-paste0(FWD,'.',1:length(FWD))
@@ -643,7 +644,7 @@ if(crunch.too){
   # get fragment numbers
   READS <- foreach(seq = 1:nrow(raw),.combine = c) %dopar% {
 
-    round(length(str_extract_all(raw[seq,1],boundary("character"))[[1]])/length(FWD)+0.4)+2
+    round(length(str_extract_all(raw[seq,1],boundary("character"))[[1]])/length(FWD)+0.4)+padding
 
   }
 

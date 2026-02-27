@@ -20,6 +20,7 @@ MeLoELF(parent,
         T2.err=0.05,
         target_fwd_auc=0.9,
         read.length=c(10,3000),
+        padding=2,
         completeness=0.9,
         matching=0.9,
         align.file='align.RData',
@@ -54,6 +55,7 @@ Defaults:
 \item{T2.err}{A numeric value indicating what type-II error rate should be targeted during mixed beta thresholding if type-I error rate cannot be estimated and if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- c(10,3000).}
+\item{read.length}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
 \item{completeness}{A numeric value indicating the minimum proportion of reference sequence length for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
@@ -110,7 +112,7 @@ The SAM file (identified by the mdir and sam.file parameters) is parsed with “
 These three aligned vectors for each read are used in phase 2.
 
 Phase 2:  Fragment Mapping and Extraction
-The original, complementary substrate sequences (identified by parent and target parameters) are each slid across the entire read sequence, and the fraction of matching bases calculated for every possible alignment position with each reference sequence. In order of decreasing reference-read complementarity, fragments are “extracted” from the read and recorded into data frames, along with their corresponding methyl score information, position within the read, and read number. This continues within recurring sliding alignments until the entire read sequence has been “extracted”, or the number of extracted fragments reaches a padded estimate of how many substrate repeats the oligomeric read should contain.
+The original, complementary substrate sequences (identified by parent and target parameters) are each slid across the entire read sequence, and the fraction of matching bases calculated for every possible alignment position with each reference sequence. In order of decreasing reference-read complementarity, fragments are “extracted” from the read and recorded into data frames, along with their corresponding methyl score information, position within the read, and read number. This continues within recurring sliding alignments until the entire read sequence has been “extracted”, or the number of extracted fragments reaches a padded (set by padding parameter) estimate of how many substrate repeats the oligomeric read should contain.
 For cases of partial read-reference complementarity, fragments are “trimmed” to the most 5’ and 3’ base-matches that have a directly adjacent base match, and only information within those indices is “extracted” from the parent read. Consequently, fragments with sequence insertions/deletions are initially recorded as separate, partial fragments in the data frame, though their read position data allows for recombination later.
 For each extracted fragment, two quality parameters are calculated. Completeness, which indicates the length of each extracted fragment relative to the reference sequence length, and matching, which indicates the proportion of bases within the extracted fragment that match their positional counterparts in the reference sequence.
 In our MeLoELF experiments, product ligations produce oligomers with an average of ~6 fragments (~240 bases). However, in a fraction of a percent of SAM file entries, erroneous reads appear that can be hundreds or more times longer than the median read length. To avoid unnecessarily inflating computational time, and because these reads are a minority that likely represent sequencing artifacts rather than physical polymer sizes, reads outside a certain size range (set by the read.length parameter) are skipped entirely.
