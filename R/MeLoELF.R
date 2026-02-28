@@ -56,6 +56,7 @@ library(stringr)
 library(foreach)
 library(doParallel)
 library(pracma)
+library(data.table)
 
 #######################
 ## Create custom functions for later analysis
@@ -578,6 +579,26 @@ pdf.make <- function(data,pars=NULL){
   return(tmp1)
 }
 
+# generate modkit summary-like statistics
+modk.sum <- function(melo,meca,seqq,thresh,methyl.type){
+  melo.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
+  meca.set=matrix(as.numeric((str_split(meca,pattern = ',')[[1]])[-1]),nrow=2,ncol = length(melo.id),byrow = T)
+  Nc=sum(str_split(seqq,pattern = '')[[1]]=='C',na.rm = T)
+  Cm.scores=matrix(0,nrow=2,ncol=Nc)
+  Cm.scores[,melo.id]=meca.set/256
+  if(methyl.type=='B'){
+    res=mean(colSums(Cm.scores)>=thresh)
+  }
+  if(methyl.type=='M'){
+    res=mean(Cm.scores[2,]>=thresh)
+  }
+  if(methyl.type=='H'){
+    res=mean(Cm.scores[1,]>=thresh)
+  }
+  return(data.frame('pC'=res,'Nc'=Nc))
+  
+}
+
 # Save relevant parameters
 PAR.list=ls()
 
@@ -817,7 +838,7 @@ if(process){
     try(REV.both.pruned[!is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)]<-REV.Cm.pruned[!is.na(REV.Cm.pruned) & is.na(REV.Chm.pruned)])
   }
 
-  #clean up data sets
+  # clean up data sets
   if(!pre.ligated){
     if(methyl.type=='B'){
       data.actual.rev=REV.both.pruned[rowSums(!is.na(REV.both.pruned))>0,rev(REV.sites)]
@@ -834,7 +855,7 @@ if(process){
     #
     save(data.actual.fwd,data.actual.rev,file = processed.file)
   }
-
+  
   #######################
   ## Processivity Analysis and Graphing
   #######################
@@ -923,7 +944,31 @@ if(process){
 
   save(matrices, file="methylation_matrices.RDS")
   write.csv(summary, "survival_summary.csv")
-
+  
+  # calculate Modkit-like overall methylation for reads
+  check.melo=fread(file = melo.file,header = F,sep = ';',fill = T)[,-3]
+  check.meca=fread(file = meca.file,header = F,sep = ';')[,1]
+  check.seq=fread(file = seq.file,header = F,sep = ';')[,1]
+  #
+  registerDoParallel(detectCores())
+  if(var.thresh<2 | pre.ligated){
+    modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
+      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = thresh)
+    }
+  }
+  if(var.thresh==2 & !(pre.ligated)){
+    modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
+      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = mean(threshIrev))
+    }
+  }
+  rm(check.meca,check.melo,check.seq)
+  #
+  used.set=which(DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length))
+  all.modk=sum(modk.dat$pC*modk.dat$Nc,na.rm = T)/sum(modk.dat$Nc)
+  used.modk=sum(modk.dat$pC[used.set]*modk.dat$Nc[used.set],na.rm = T)/sum(modk.dat$Nc[used.set])
+  filt.modk=sum(modk.dat$pC[-used.set]*modk.dat$Nc[-used.set],na.rm = T)/sum(modk.dat$Nc[-used.set])
+  rm(modk.dat)
+  
   # quality control analyses
   if(!pre.ligated){
     read.filt=nrow(data.actual.rev)/sum(Q.reads[,3]=='REV',na.rm = T)
@@ -988,7 +1033,7 @@ if(process){
     legend('topright',legend = plot.nom,col = c('blue','red'),fill = c('blue','red'),cex=1.1,bty = 'n')
     #
     par(mar=c(3,5,3,1))
-    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main=paste0(plot_title,'Methyl Location Distributions'),cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
+    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+4),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main=paste0(plot_title,'Methyl Location Distributions'),cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
     axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
@@ -999,8 +1044,9 @@ if(process){
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c(paste0(plot.nom,' Methyls'),"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
-    text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+    text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
+    text(x=2*length(FWD.sites),y=0.975,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5m(h)C'),col='black',cex=1.3)
     #
     dev.off()
   }
