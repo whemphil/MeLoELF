@@ -29,7 +29,7 @@ MeLoELF <- function(parent,
                     T1.err=0.05,
                     T2.err=0.05,
                     target_fwd_auc=0.9,
-                    read.length=c(10,3000),
+                    read.length=NULL,
                     padding=2,
                     completeness=0.9,
                     matching=0.9,
@@ -610,6 +610,12 @@ if(crunch.too){
   FWD=str_extract_all(parent,boundary("character"))[[1]]
   REV=str_extract_all(target,boundary("character"))[[1]]
 
+  # set read length filters
+  if(is.null(read.length)){
+    r98=(nchar(raw$V1)[order(nchar(raw$V1))])[round(0.98*length(raw$V1))]
+    read.length=c(round(length(REV)/2),r98)
+  }
+
   # load CpG indices, hydroxy-methyl scores, and methyl scores into alignable arrays
   Chm=str_split(raw.2[,1],',')
   Cm=str_split(raw.2[,2],',')
@@ -977,7 +983,7 @@ if(process){
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
-    text(x=0,y=0.975,pos=4,labels=paste0(round(100*pMAP),' -> ',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
+    text(x=0,y=0.975,pos=4,labels=paste0(round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     #
     dev.off()
     #
