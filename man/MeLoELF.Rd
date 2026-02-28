@@ -186,7 +186,7 @@ Graphs:
 }
 
 \description{
-Function to map and computationally deconstruct end-ligated frament sequences, parse their methylation states, and analyze enzyme activity and processivity.
+Function to map and computationally deconstruct end-ligated fragment sequences, parse their methylation states, and analyze enzyme activity and processivity.
 
 Designed and optimized for Unix machines -- may return errors on Windows PCs.
 }
