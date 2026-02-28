@@ -28,7 +28,8 @@ MeLoELF(parent,
         seq.file='sequences.txt',
         melo.file='methlocations.txt',
         meca.file='methcalls.txt',
-        plot_title='')
+        plot_title='',
+        plot.nom=c('FWD','REV'))
 }
 \arguments{
 
@@ -63,7 +64,8 @@ Defaults:
 \item{seq.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read sequences; DEFAULT -- 'sequences.txt'.}
 \item{melo.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read CpG indices; DEFAULT -- 'methlocations.txt'.}
 \item{meca.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read methyl and hydroxy-methyl scores; DEFAULT -- 'methcalls.txt'.}
-\item{plot_title}{A single character string indicating the common ID for outputted analysis graphs; DEFAULT -- none.}
+\item{plot_title}{A single character string indicating a common ID to append to the titles of outputted analysis graphs; DEFAULT -- none.}
+\item{plot.nom}{A character string vector of length 2 indicating the naming convention to use for the FWD/parent and REV/target strands, respectively, in outputted analysis graphs; DEFAULT -- c('FWD','REV').}
 }
 
 \details{

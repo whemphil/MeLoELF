@@ -38,7 +38,8 @@ MeLoELF <- function(parent,
                     seq.file='sequences.txt',
                     melo.file='methlocations.txt',
                     meca.file='methcalls.txt',
-                    plot_title=''){
+                    plot_title='',
+                    plot.nom=c('FWD','REV')){
 
 
 #######################################################################
@@ -963,7 +964,7 @@ if(process){
       FWD.Cm.pdfs[[i]]=density(data.actual.fwd[,i],na.rm = T,from = 0,to = 1)
       REV.Cm.pdfs[[i]]=density(data.actual.rev[,i],na.rm = T,from = 0,to = 1)
     }
-    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = 'Methyl Score Distributions',cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
+    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(FWD.sites)),main = paste0(plot_title,'Methyl Score Distributions'),cex.axis = 1.6,ylab = 'Methyl Score',cex.lab=2,cex.main=2,xaxt='n',xlab='')
     if(var.thresh<2 | thresh.meth=='AUC'){
       abline(h=thresh,lty='dashed',col='grey',lwd=2)
     }
@@ -984,10 +985,10 @@ if(process){
     axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.2)
     axis(side = 1,at = c(1:length(FWD.sites))-0.725,labels = paste0(round(colSums(!is.na(data.actual.fwd))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'blue')
     axis(side = 1,at = c(1:length(FWD.sites))-0.275,labels = paste0(round(colSums(!is.na(data.actual.rev))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'red')
-    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.1,bty = 'n')
+    legend('topright',legend = plot.nom,col = c('blue','red'),fill = c('blue','red'),cex=1.1,bty = 'n')
     #
     par(mar=c(3,5,3,1))
-    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main='Methyl Location Distributions',cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
+    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main=paste0(plot_title,'Methyl Location Distributions'),cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
     axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
@@ -997,7 +998,7 @@ if(process){
     points(c(0:6)*5+1.5,fCpGs.rev,type='h',pch=22,lwd=15,col=2)
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
-    legend('topright',legend=c('FWD Methyls','REV Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
+    legend('topright',legend=c(paste0(plot.nom,' Methyls'),"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     #
@@ -1007,32 +1008,32 @@ if(process){
   #
   par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
   f=1
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = 'Fragment Positions: Relative to Read')
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = paste0(plot_title,'Fragment Positions: Relative to Read'))
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
-  legend('topright',legend = c('Both','FWD','REV'),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
+  legend('topright',legend = c('Both',plot.nom),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
   #
   par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
   f=2
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'Fragment Positions: From Nearest Edge')
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'From Nearest Edge')
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
   f=3
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 5' End")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 5' End")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
   f=4
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 3' End")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 3' End")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
   f=5
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From Read Center")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "From Read Center")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
@@ -1043,11 +1044,11 @@ if(process){
     #
     FWD.Cm.pdfs=pdf.make(polymer.actual.fwd,pars = c(0,1))
     REV.Cm.pdfs=pdf.make(polymer.actual.rev,pars = c(0,1))
-    plot(NULL,NULL,ylim=c(0,max(c(FWD.Cm.pdfs$y,REV.Cm.pdfs$y))),xlim=c(0,1),main = 'Methyl Score Distributions',cex.axis = 1.6,xlab = 'Methyl Score',cex.lab=2,cex.main=2,ylab='Probability Density')
+    plot(NULL,NULL,ylim=c(0,max(c(FWD.Cm.pdfs$y,REV.Cm.pdfs$y))),xlim=c(0,1),main = paste0(plot_title,'Methyl Score Distributions'),cex.axis = 1.6,xlab = 'Methyl Score',cex.lab=2,cex.main=2,ylab='Probability Density')
     abline(v=thresh,lty='dashed',col='grey',lwd=2)
     lines(FWD.Cm.pdfs,col='blue',lwd=2)
     lines(REV.Cm.pdfs,col='red',lwd=2)
-    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.3,bty = 'n')
+    legend('topright',legend = plot.nom,col = c('blue','red'),fill = c('blue','red'),cex=1.3,bty = 'n')
     #
     dev.off()
   }
@@ -1058,15 +1059,12 @@ if(process){
   png(paste0(wd, "/methylation_survival.png"), height = 1320, width = 2800, res=300)
   par(mfrow=c(1,1),mar=c(5,6,3,8))
   plot(0, 0, type="n", xlim=c(0,1), ylim=c(0,100),
-       xlab="Survival score", ylab="Percent of reads",
-       main=paste(plot_title, " - Methylation survival"), cex.main = 2, cex.axis=2, cex.lab = 2)
-  #main=expression(paste(Delta, "351 - Methylation survival")), cex.axis=1.2, cex.lab = 1.3)
+       xlab="Survival score", ylab="Percent of Reads",
+       main=paste0(plot_title, "Methylation Survival"), cex.main = 2, cex.axis=2, cex.lab = 2)
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
   lines(rev.surv.plot$x, rev.surv.plot$y, type="s", col="magenta1", lwd=2)
   lines(ctrl.surv.plot$x, ctrl.surv.plot$y, type="s", col="grey", lwd=2)
-  legend('topright', legend = c(paste0('FWD (AUC=',round(fwd.auc, digits=2),')'), paste0('REV (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
-  #grid()
-  #dev.copy2pdf(file="methylation_survival.pdf", height = 5, width = 7)
+  legend('topright', legend = c(paste0(plot.nom[1],' (AUC=',round(fwd.auc, digits=2),')'), paste0(plot.nom[2],' (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
   dev.off()
 
   write.csv(rev.binary, "revbinary.csv")
@@ -1097,11 +1095,11 @@ if(process){
 
 
     suppressWarnings(
-      barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2,cex.axis = 2,ylab = 'Percent of reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste(plot_title, " - Methylation distribution")))
+      barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2,cex.axis = 2,ylab = 'Percent of Reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste0(plot_title, "Methylation Distribution")))
     barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(3, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
     barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(3, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
     axis(1, at = seq(0, (length(fwd_vals) - 1) * 4 + 1, by = 4)+1.5, labels = x_labels, cex.axis = 2)
-    legend('topright',inset = c(-0.2, 0.1),legend = c('FWD', 'REV','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
+    legend('topright',inset = c(-0.2, 0.1),legend = c(plot.nom,'Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
 
     dev.off()
 
