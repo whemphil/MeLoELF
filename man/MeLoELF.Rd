@@ -16,12 +16,12 @@ MeLoELF(parent,
         thresh.meth='BM',
         BM.strand.data='r',
         var.thresh=0,
-        T1.err=0.05,
+        T1.err=0.01,
         T2.err=0.05,
         target_fwd_auc=0.9,
         read.length=NULL,
         padding=2,
-        completeness=0.9,
+        completeness=0.3,
         matching=0.9,
         align.file='align.RData',
         processed.file='processed.RData',
@@ -52,12 +52,12 @@ Defaults:
 \item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used, or a single numeric value indicating the desired value for manual thresholding -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning, 0-1 = manual thresholding; DEFAULT -- 'BM'.}
 \item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' and var.thresh<2 (ignored for thresholding purposes if var.thresh=2) -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
 \item{var.thresh}{A numeric value indicating whether CpG sites should be thresholded individually (ignored unless pre.ligated=F and thresh.meth='BM') -- 0 = no individual site thresholding, 1 = individual thresholding for rev/target strand sites only, 2 = individual thresholding for all sites; DEFAULT -- 0.}
-\item{T1.err}{A numeric value indicating what type-I error rate should be targeted during mixed beta thresholding if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
+\item{T1.err}{A numeric value indicating what type-I error rate should be targeted during mixed beta thresholding if thresh.meth='BM' -- 0-1; DEFAULT -- 0.01.}
 \item{T2.err}{A numeric value indicating what type-II error rate should be targeted during mixed beta thresholding if type-I error rate cannot be estimated and if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- scales lower bound to half the REV/target sequence length, and upper bound to the 98th percentile of SAM file read lengths.}
 \item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
-\item{completeness}{A numeric value indicating the minimum proportion of reference sequence length for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
+\item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.3.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}
