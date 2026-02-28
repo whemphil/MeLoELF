@@ -725,6 +725,7 @@ if(process){
   FragPos.rev=pos.score(REV.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(REV.index)+1)-1)),length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
   pMAP=sum(mapped.frac*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac)])
   pMAP2=sum(mapped.frac2*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac2)])
+  pMAP0=sum(DATA[['RLs']][DATA[['RLs']]>=read.length[1] & DATA[['RLs']]<=read.length[2]])/sum(DATA[['RLs']])
 
   if(pre.ligated){
 
@@ -983,7 +984,7 @@ if(process){
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
-    text(x=0,y=0.975,pos=4,labels=paste0(round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
+    text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     #
     dev.off()
     #
