@@ -86,7 +86,6 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     DATA='blank' # bypasses polymers outside desired length range
   } else {
     test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
-    lengths.of.reads=length(test.0)
     test.Chm=rep(NA,times=length(test.0)) # creates temporary  vector to store hydroxy methyl scores for polymer, with NA as default value
     test.Cm=test.Chm
     test.Chm[which(test.0=='C')] = 0 # sets the default methylation score for all Cs in the polymer to zero
@@ -676,6 +675,8 @@ if(process){
   REV.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.index)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
   Q.reads=matrix(NA,nrow=DATA[['N']],ncol = 4); colnames(Q.reads)<-c('comp','match','id','polyN')
   remapped.reads=as.data.frame(matrix(NA,nrow=length(DATA[['RSs']]),ncol=4)); colnames(remapped.reads) <- c('Length','Strand','Mcomp','Mmatch')
+  mapped.frac=rep(NA,times=length(DATA)-5)
+  mapped.frac2=rep(NA,times=length(DATA)-5)
   COUNTER=1
 
   # loop for pulling alignment data out of large DATA containers and consolidating it
@@ -693,6 +694,8 @@ if(process){
     Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),4]=i
     FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
     REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
+    mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+    mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
     if(pre.ligated){
       remapped.reads$Length[i]=DATA[['RLs']][i]
       remapped.reads$Mcomp[i]=mean(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
@@ -714,6 +717,8 @@ if(process){
   REV.index[REV.index<0]=NA
   FragPos.fwd=pos.score(FWD.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(FWD.index)+1)-1)),length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
   FragPos.rev=pos.score(REV.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(REV.index)+1)-1)),length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
+  pMAP=sum(mapped.frac*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac)])
+  pMAP2=sum(mapped.frac2*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac2)])
 
   if(pre.ligated){
 
@@ -965,12 +970,14 @@ if(process){
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
     abline(h=read.filt,col='orange',lty='dotted',lwd=2)
+    abline(h=pMAP,col='cyan',lty='dotted',lwd=2)
     points(c(0:6)*5+0.5,fCpGs.fwd,type='h',pch=22,lwd=15,col=1)
     points(c(0:6)*5+1.5,fCpGs.rev,type='h',pch=22,lwd=15,col=2)
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+    text(x=0,y=0.975,pos=4,labels=paste0(round(100*pMAP),' -> ',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     #
     dev.off()
     #
