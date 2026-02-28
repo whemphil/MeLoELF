@@ -567,8 +567,12 @@ pos.score <- function(indexes,n,k){
 }
 
 # probability density function maker
-pdf.make <- function(data){
-  tmp1=density(data,na.rm = T)
+pdf.make <- function(data,pars=NULL){
+  if(is.null(pars)){
+    tmp1=density(data,na.rm = T)
+  }else{
+    tmp1=density(data,from = pars[1],to = pars[2],na.rm = T)
+  }
   tmp1$y=tmp1$y/sum(mean(diff(tmp1$x))*tmp1$y)
   return(tmp1)
 }
@@ -635,6 +639,7 @@ if(crunch.too){
     map.fragments(read=raw[seq,1],Cm[[seq]],Chm[[seq]],C.key[[seq]],read.length=read.length,FWD=FWD,REV=REV)
 
   }
+
   # get lengths of reads
   lengths.of.reads <- nchar(raw$V1)
 
@@ -672,6 +677,12 @@ if(process){
     rm(list=c(setdiff(ls(),c(PAR.list,'DATA'))))
   }
 
+  # set read length filters
+  if(is.null(read.length)){
+    r98=(DATA[['RLs']][order(as.numeric(DATA[['RLs']]))])[round(0.98*length(DATA[['RLs']]))]
+    read.length=c(round(length(DATA[['REV']])/2),r98)
+  }
+
   # generate empty matrices to consolidate data
   FWD.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.Chm)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
   REV.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.Chm)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
@@ -680,9 +691,11 @@ if(process){
   FWD.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.index)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
   REV.index=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.index)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
   Q.reads=matrix(NA,nrow=DATA[['N']],ncol = 4); colnames(Q.reads)<-c('comp','match','id','polyN')
-  remapped.reads=as.data.frame(matrix(NA,nrow=length(DATA[['RSs']]),ncol=4)); colnames(remapped.reads) <- c('Length','Strand','Mcomp','Mmatch')
   mapped.frac=rep(NA,times=length(DATA)-5)
   mapped.frac2=rep(NA,times=length(DATA)-5)
+  if(pre.ligated){
+    remapped.reads=as.data.frame(matrix(NA,nrow=length(DATA[['RSs']]),ncol=4)); colnames(remapped.reads) <- c('Length','Strand','Coverage','Acc')
+  }
   COUNTER=1
 
   # loop for pulling alignment data out of large DATA containers and consolidating it
@@ -703,17 +716,15 @@ if(process){
     mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
     mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
     if(pre.ligated){
-      remapped.reads$Length[i]=DATA[['RLs']][i]
-      remapped.reads$Mcomp[i]=mean(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
-      remapped.reads$Mmatch[i]=mean(as.numeric(DATA[[i]]$Q[,2]),na.rm = T)
+      remapped.reads$Acc[i]=sum(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']]) == c(matrix(c(DATA[['FWD']],DATA[['REV']]),nrow = nrow(DATA[[i]][['REV.align']]),ncol = length(c(DATA[['FWD']],DATA[['REV']])),byrow = T)),na.rm = T)/sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))
       if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
         remapped.reads$Strand[i]='FWD'
       }
       if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
         remapped.reads$Strand[i]='REV'
       }
-      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3])) & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) < sum(!is.na(DATA[[i]]$Q[,3]))){
-        remapped.reads$Strand[i]=sum(as.numeric(DATA[[i]]$Q[which(DATA[[i]]$Q[,3]=='REV'),1]),na.rm = T)/sum(as.numeric(DATA[[i]]$Q[,1]),na.rm = T)
+      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) >0 & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) > 0){
+        remapped.reads$Strand[i]='Het'
       }
     }
     COUNTER=COUNTER+nrow(DATA[[i]]$Q)
@@ -721,8 +732,14 @@ if(process){
   }
   FWD.index[FWD.index<0]=NA
   REV.index[REV.index<0]=NA
+  if(pre.ligated){
+    remapped.reads$Length[DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length)]=DATA[['RLs']][DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length)]
+    remapped.reads$Coverage=mapped.frac
+  }
   FragPos.fwd=pos.score(FWD.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(FWD.index)+1)-1)),length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
   FragPos.rev=pos.score(REV.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(REV.index)+1)-1)),length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
+  FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
+  FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
   pMAP=sum(mapped.frac*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac)])
   pMAP2=sum(mapped.frac2*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac2)])
   pMAP0=sum(DATA[['RLs']][DATA[['RLs']]>=read.length[1] & DATA[['RLs']]<=read.length[2]])/sum(DATA[['RLs']])
@@ -730,7 +747,7 @@ if(process){
   if(pre.ligated){
 
     # compile data for REV polymers with sufficient mapping quality
-    polymer.ids=which(remapped.reads$Strand=='REV' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
+    polymer.ids=which(remapped.reads$Strand=='REV' & remapped.reads$Coverage>=completeness & remapped.reads$Acc>=matching)
     polymer.Chm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
     polymer.Cm=matrix(NA,nrow=length(polymer.ids),ncol = round((max(remapped.reads$Length[polymer.ids],na.rm = T)/length(DATA[['REV']])+1)*length(REV.sites)))
     for (i in 1:length(polymer.ids)){
@@ -747,7 +764,7 @@ if(process){
     polymer.Both=polymer.Chm+polymer.Cm
 
     # compile data for FWD polymers with sufficient mapping quality
-    polymer.ids.fwd=which(remapped.reads$Strand=='FWD' & remapped.reads$Mcomp>=completeness & remapped.reads$Mmatch>=matching)
+    polymer.ids.fwd=which(remapped.reads$Strand=='FWD' & remapped.reads$Coverage>=completeness & remapped.reads$Acc>=matching)
     polymer.Chm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
     polymer.Cm.fwd=matrix(NA,nrow=length(polymer.ids.fwd),ncol = round((max(remapped.reads$Length[polymer.ids.fwd],na.rm = T)/length(DATA[['FWD']])+1)*length(FWD.sites)))
     for (i in 1:length(polymer.ids.fwd)){
@@ -787,8 +804,6 @@ if(process){
     FWD.Cm.pruned=FWD.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD')),]
     REV.Chm.pruned=REV.Chm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
     REV.Cm.pruned=REV.Cm[which((Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV')),]
-    FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
-    FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
   }
 
   # calculate total methylation data
@@ -969,7 +984,7 @@ if(process){
     axis(side = 1,at = c(1:length(FWD.sites))-0.5,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.2)
     axis(side = 1,at = c(1:length(FWD.sites))-0.725,labels = paste0(round(colSums(!is.na(data.actual.fwd))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'blue')
     axis(side = 1,at = c(1:length(FWD.sites))-0.275,labels = paste0(round(colSums(!is.na(data.actual.rev))/1e3),'k'),tick = F,line = 1.2,cex.axis=1.0,col.axis = 'red')
-    legend('topright',legend = c('SYNTH','CAT'),col = c('blue','red'),fill = c('blue','red'),cex=1.1)
+    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.1,bty = 'n')
     #
     par(mar=c(3,5,3,1))
     plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+2),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main='Methyl Location Distributions',cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
@@ -982,45 +997,57 @@ if(process){
     points(c(0:6)*5+1.5,fCpGs.rev,type='h',pch=22,lwd=15,col=2)
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
-    legend('topright',legend=c('SYNTH Methyls','CAT Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.7)
+    legend('topright',legend=c('FWD Methyls','REV Methyls',"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
     text(x=(5*length(FWD.sites)+2)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     #
     dev.off()
+  }
+  png('QCgraphsB.png', height = 2650, width = 2800, res=300)
+  #
+  par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
+  f=1
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = 'Fragment Positions: Relative to Read')
+  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+  lines(pdf.make(FragPos.revQ[,f]),col='red')
+  legend('topright',legend = c('Both','FWD','REV'),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
+  #
+  par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
+  f=2
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'Fragment Positions: From Nearest Edge')
+  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+  lines(pdf.make(FragPos.revQ[,f]),col='red')
+  #
+  par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
+  f=3
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 5' End")
+  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+  lines(pdf.make(FragPos.revQ[,f]),col='red')
+  #
+  par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
+  f=4
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 3' End")
+  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+  lines(pdf.make(FragPos.revQ[,f]),col='red')
+  #
+  par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
+  f=5
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From Read Center")
+  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+  lines(pdf.make(FragPos.revQ[,f]),col='red')
+  #
+  dev.off()
+  if(pre.ligated){
+    png('QCgraphs.png', height = 1325, width = 2800, res=300)
+    par(mfrow=c(1,1),mar=c(4,5,3,1))
     #
-    #
-    png('QCgraphsB.png', height = 2650, width = 2800, res=300)
-    #
-    par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
-    f=1
-    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = 'Fragment Positions: Relative to Read')
-    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
-    lines(pdf.make(FragPos.revQ[,f]),col='green')
-    legend('bottom',legend = c('Both','FWD','REV'),fill = c('black','red','green'),col=c('black','red','green'),bty = 'n')
-    #
-    par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
-    f=2
-    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'Fragment Positions: From Nearest Edge')
-    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
-    lines(pdf.make(FragPos.revQ[,f]),col='green')
-    #
-    par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
-    f=3
-    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 5' End")
-    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
-    lines(pdf.make(FragPos.revQ[,f]),col='green')
-    #
-    par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
-    f=4
-    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From 3' End")
-    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
-    lines(pdf.make(FragPos.revQ[,f]),col='green')
-    #
-    par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
-    f=5
-    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "Fragment Positions: From Read Center")
-    lines(pdf.make(FragPos.fwdQ[,f]),col='red')
-    lines(pdf.make(FragPos.revQ[,f]),col='green')
+    FWD.Cm.pdfs=pdf.make(polymer.actual.fwd,pars = c(0,1))
+    REV.Cm.pdfs=pdf.make(polymer.actual.rev,pars = c(0,1))
+    plot(NULL,NULL,ylim=c(0,max(c(FWD.Cm.pdfs$y,REV.Cm.pdfs$y))),xlim=c(0,1),main = 'Methyl Score Distributions',cex.axis = 1.6,xlab = 'Methyl Score',cex.lab=2,cex.main=2,ylab='Probability Density')
+    abline(v=thresh,lty='dashed',col='grey',lwd=2)
+    lines(FWD.Cm.pdfs,col='blue',lwd=2)
+    lines(REV.Cm.pdfs,col='red',lwd=2)
+    legend('topright',legend = c('FWD','REV'),col = c('blue','red'),fill = c('blue','red'),cex=1.3,bty = 'n')
     #
     dev.off()
   }
@@ -1037,7 +1064,7 @@ if(process){
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
   lines(rev.surv.plot$x, rev.surv.plot$y, type="s", col="magenta1", lwd=2)
   lines(ctrl.surv.plot$x, ctrl.surv.plot$y, type="s", col="grey", lwd=2)
-  legend('topright', legend = c(paste0('SYNTH (AUC=',round(fwd.auc, digits=2),')'), paste0('CAT (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
+  legend('topright', legend = c(paste0('FWD (AUC=',round(fwd.auc, digits=2),')'), paste0('REV (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
   #grid()
   #dev.copy2pdf(file="methylation_survival.pdf", height = 5, width = 7)
   dev.off()
@@ -1074,7 +1101,7 @@ if(process){
     barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(3, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
     barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(3, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
     axis(1, at = seq(0, (length(fwd_vals) - 1) * 4 + 1, by = 4)+1.5, labels = x_labels, cex.axis = 2)
-    legend('topright',inset = c(-0.2, 0.1),legend = c('SYNTH', 'CAT','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
+    legend('topright',inset = c(-0.2, 0.1),legend = c('FWD', 'REV','Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
 
     dev.off()
 

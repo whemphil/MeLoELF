@@ -46,7 +46,7 @@ Defaults:
 \item{sam.indices}{A numeric vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of sam file header lines to skip; DEFAULT -- c(10,33,34,0)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
-\item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity; DEFAULT -- FALSE.}
+\item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity (see Details before using); DEFAULT -- FALSE.}
 \item{methyl.type}{A single character string indicating which methyl scores should be used for analysis -- 'M' = methyl, 'H' = hydroxy-methyl, 'B' = both/combined; DEFAULT -- 'B'.}
 \item{thresh.meth}{A single character string indicating which methyl score thresholding method should be used, or a single numeric value indicating the desired value for manual thresholding -- 'BM' = Mixed Beta Distributions, 'AUC' = Survival AUC Tuning, 0-1 = manual thresholding; DEFAULT -- 'BM'.}
 \item{BM.strand.data}{A single character string indicating what subset of the data's CpG methyl scores should be used for thresholding if thresh.meth='BM' and var.thresh<2 (ignored for thresholding purposes if var.thresh=2) -- 'f' = FWD/parent strand scores, 'r' = REV/target strand scores, 'b' = all scores; DEFAULT -- 'r'.}
@@ -73,6 +73,8 @@ Defaults:
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
+
+{pre.ligated} -- {This parameter is intended for niche applications with enzymes acting on hemi-methylated substrate. If pre.ligated=T, mapped fragments are computationally reconstructed into their original read polymers, sorted into FWD and REV homopolymers, filtered according to their read mapping and coverage quality, then collapsed into vectors of only their indexed CpG sites for analysis. This option ignores the var.thresh parameter entirely, and it repurposes the completeness and matching parameters during polymer filtering for read coverage and mapped section basematch accuracy metrics, respectively. In addition, only the methylation_survival plot and a rudimentary version of the QCgraphs plot are exported.}
 
 ---------
 ---------
