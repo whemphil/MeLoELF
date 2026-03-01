@@ -78,8 +78,8 @@ find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
     FWD.match=which(polymer==FWD[1])
     REV.match=which(polymer==REV[1])
     for(i in 2:length(FWD)){
-      FWD.match=FWD.match[(FWD.match %in% (which(polymer==FWD[i])-i+1))]
-      REV.match=REV.match[(REV.match %in% (which(polymer==REV[i])-i+1))]
+      FWD.match=FWD.match[which(polymer[FWD.match+i-1] == FWD[i])]
+      REV.match=REV.match[which(polymer[REV.match+i-1] == REV[i])]
     }
     #
     if(length(c(FWD.match,REV.match))>0){
@@ -1172,7 +1172,7 @@ if(process){
     legend('topright',legend = plot.nom,col = c('blue','red'),fill = c('blue','red'),cex=1.1,bty = 'n')
     #
     par(mar=c(3,5,3,1))
-    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+4),ylim=c(0,1),xaxt='n',ylab='Fraction of Product',main=paste0(plot_title,'Methyl Location Distributions'),cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
+    plot(NULL,NULL,xlim=c(0,5*length(FWD.sites)+4),ylim=c(0,1.1),xaxt='n',ylab='Fraction of Product',main=paste0(plot_title,'Methyl Location Distributions'),cex.main=2,cex.lab=1.5,cex.axis=1.5,xlab='')
     axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
@@ -1186,12 +1186,12 @@ if(process){
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c(paste0(plot.nom,' Methyls'),"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
     if(exact.search){
-      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62),pos = 2,col = c('red','purple'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev)),c('% CpG','% Sub.')))
+      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.8,0.7),pos = 2,col = c('red','purple'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev)),c('% CpG','% Sub.')))
     }else{
-      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.8,0.7,0.6),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     }
-    text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
-    text(x=2*length(FWD.sites),y=0.975,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5m(h)C'),col='black',cex=1.3)
+    text(x=0,y=1.07,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
+    text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5m(h)C'),col='grey',cex=1.3)
     #
     dev.off()
   }
