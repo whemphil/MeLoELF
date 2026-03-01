@@ -69,75 +69,230 @@ find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
   if(nchar(read)<min(read.length) | nchar(read)>max(read.length)){
     DATA='blank' # bypasses polymers outside desired length range
   } else {
-    polymer=str_split(read,pattern = '')[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
-    Cm.ids=which(polymer=='C')[Cm]
-    Cm.scores=C.key[(length(Chm)+1):(length(Chm)+length(Cm))]
-    Chm.ids=which(polymer=='C')[Chm]
-    Chm.scores=C.key[1:length(Chm)]
-    #
-    FWD.match=which(polymer==FWD[1])
-    REV.match=which(polymer==REV[1])
-    for(i in 2:length(FWD)){
-      FWD.match=FWD.match[which(polymer[FWD.match+i-1] == FWD[i])]
-      REV.match=REV.match[which(polymer[REV.match+i-1] == REV[i])]
-    }
-    #
-    if(length(c(FWD.match,REV.match))>0){
-      FWD.align=matrix(c(rep(FWD,times=length(FWD.match)),rep('x',times=length(FWD)*length(REV.match))),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T)
-      colnames(FWD.align) <- paste0(FWD,'.',1:length(FWD))
-      REV.align=matrix(c(rep('x',times=length(REV)*length(FWD.match)),rep(REV,times=length(REV.match))),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T)
-      colnames(REV.align) <- paste0(REV,'.',1:length(REV))
-      #
-      quality=cbind('comp'=rep(1,times=length(c(FWD.match,REV.match))),'match'=rep(1,times=length(c(FWD.match,REV.match))),'id'=rep(c('FWD','REV'),times=c(length(FWD.match),length(REV.match))))
-      #
-      FWD.I=matrix(c(FWD.match-1,rep(0,times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD))+matrix(c(rep(1:length(FWD),times=length(FWD.match)),rep(0,times=length(FWD.match)*length(FWD))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD),byrow = T)
-      REV.I=matrix(c(rep(0,times=length(FWD.match)),REV.match-1),nrow = length(c(FWD.match,REV.match)),ncol = length(REV))+matrix(c(rep(0,times=length(FWD.match)*length(FWD)),rep(1:length(REV),times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(REV),byrow = T)
-      #
-      FWD.Chm=t(matrix(sqrt((FWD=='C')-1),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T))
-      REV.Chm=t(matrix(sqrt((REV=='C')-1),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T))
-      FWD.Cm=FWD.Chm
-      REV.Cm=REV.Chm
-      FWD.Chm[t(FWD.I) %in% Chm.ids]=Chm.scores
-      REV.Chm[t(REV.I) %in% Chm.ids]=Chm.scores
-      FWD.Cm[t(FWD.I) %in% Cm.ids]=Cm.scores
-      REV.Cm[t(REV.I) %in% Cm.ids]=Cm.scores
-      FWD.Chm=t(FWD.Chm)
-      REV.Chm=t(REV.Chm)
-      FWD.Cm=t(FWD.Cm)
-      REV.Cm=t(REV.Cm)
-      if(length(REV.match)>0 & length(c(REV.match,FWD.match))>1){
-        FWD.Chm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
-        FWD.Cm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
-      }
-      if(length(FWD.match)>0 & length(c(REV.match,FWD.match))>1){
-        REV.Chm[1:length(FWD.match),]=NA
-        REV.Cm[1:length(FWD.match),]=NA
-      }
-      if(length(REV.match)>0 & length(c(REV.match,FWD.match))==1){
-        FWD.Chm[]=NA
-        FWD.Cm[]=NA
-      }
-      if(length(FWD.match)>0 & length(c(REV.match,FWD.match))==1){
-        REV.Chm[]=NA
-        REV.Cm[]=NA
-      }
-      colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
-      colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
-      colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
-      colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
-      #
-      #
-      DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=FWD.I,'REV.I'=REV.I,'Nfrag'=length(c(FWD.match,REV.match)))
+    if((length(Cm)+length(Chm))!=length(C.key)){
+      show('WARNING! Read MM and ML tag info are different lengths...skipping read!')
+      DATA='blank'
     }else{
-      DATA=list('Nfrag'=0)
+      polymer=str_split(read,pattern = '')[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
+      Cm.ids=which(polymer=='C')[Cm]
+      Cm.scores=C.key[(length(Chm)+1):(length(Chm)+length(Cm))]
+      Chm.ids=which(polymer=='C')[Chm]
+      Chm.scores=C.key[1:length(Chm)]
+      #
+      FWD.match=which(polymer==FWD[1])
+      REV.match=which(polymer==REV[1])
+      for(i in 2:length(FWD)){
+        FWD.match=FWD.match[which(polymer[FWD.match+i-1] == FWD[i])]
+        REV.match=REV.match[which(polymer[REV.match+i-1] == REV[i])]
+      }
+      #
+      if(length(c(FWD.match,REV.match))>0){
+        FWD.align=matrix(c(rep(FWD,times=length(FWD.match)),rep('x',times=length(FWD)*length(REV.match))),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T)
+        colnames(FWD.align) <- paste0(FWD,'.',1:length(FWD))
+        REV.align=matrix(c(rep('x',times=length(REV)*length(FWD.match)),rep(REV,times=length(REV.match))),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T)
+        colnames(REV.align) <- paste0(REV,'.',1:length(REV))
+        #
+        quality=cbind('comp'=rep(1,times=length(c(FWD.match,REV.match))),'match'=rep(1,times=length(c(FWD.match,REV.match))),'id'=rep(c('FWD','REV'),times=c(length(FWD.match),length(REV.match))))
+        #
+        FWD.I=matrix(c(FWD.match-1,rep(0,times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD))+matrix(c(rep(1:length(FWD),times=length(FWD.match)),rep(0,times=length(FWD.match)*length(FWD))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD),byrow = T)
+        REV.I=matrix(c(rep(0,times=length(FWD.match)),REV.match-1),nrow = length(c(FWD.match,REV.match)),ncol = length(REV))+matrix(c(rep(0,times=length(FWD.match)*length(FWD)),rep(1:length(REV),times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(REV),byrow = T)
+        #
+        FWD.Chm=t(matrix(sqrt((FWD=='C')-1),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T))
+        REV.Chm=t(matrix(sqrt((REV=='C')-1),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T))
+        FWD.Cm=FWD.Chm
+        REV.Cm=REV.Chm
+        FWD.Chm[t(FWD.I) %in% Chm.ids]=Chm.scores[Chm.ids %in% t(FWD.I)]
+        REV.Chm[t(REV.I) %in% Chm.ids]=Chm.scores[Chm.ids %in% t(REV.I)]
+        FWD.Cm[t(FWD.I) %in% Cm.ids]=Cm.scores[Cm.ids %in% t(FWD.I)]
+        REV.Cm[t(REV.I) %in% Cm.ids]=Cm.scores[Cm.ids %in% t(REV.I)]
+        FWD.Chm=t(FWD.Chm)
+        REV.Chm=t(REV.Chm)
+        FWD.Cm=t(FWD.Cm)
+        REV.Cm=t(REV.Cm)
+        if(length(REV.match)>0 & length(c(REV.match,FWD.match))>1){
+          FWD.Chm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
+          FWD.Cm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
+        }
+        if(length(FWD.match)>0 & length(c(REV.match,FWD.match))>1){
+          REV.Chm[1:length(FWD.match),]=NA
+          REV.Cm[1:length(FWD.match),]=NA
+        }
+        if(length(REV.match)>0 & length(c(REV.match,FWD.match))==1){
+          FWD.Chm[]=NA
+          FWD.Cm[]=NA
+        }
+        if(length(FWD.match)>0 & length(c(REV.match,FWD.match))==1){
+          REV.Chm[]=NA
+          REV.Cm[]=NA
+        }
+        colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
+        colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
+        colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
+        colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
+        #
+        #
+        DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=FWD.I,'REV.I'=REV.I,'Nfrag'=length(c(FWD.match,REV.match)))
+      }else{
+        DATA=list('Nfrag'=0)
+      }
     }
-    #
   }
   return(DATA)
 }
 
 # Fragment mapping algorithm
 map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
+
+  bounds <- function(data){
+    slideSum <- function(x,n=1){
+      data=c(rep(0,times=n),x,rep(0,times=n))
+      results=rep(NA,times=length(x))
+      for(i in 1:length(x)){
+        results[i]=sum(data[i:(i+2*n)])
+      }
+      return(results)
+    }
+    s1=slideSum(as.integer(data))
+    if(sum(s1>1 & as.numeric(data))==0){
+      return(NULL)
+    }
+    s2=range(which(s1>1 & as.numeric(data)))
+    results=rep(F,times=length(data))
+    results[s2[1]:s2[2]]=T
+    return(results)
+  }
+
+  get.scores <- function(poly.ref,FWD,REV){
+    FWD.score=rep(0,times=length(poly.ref)+length(FWD))
+    REV.score=rep(0,times=length(poly.ref)+length(REV))
+    for(i in 1:length(REV)){
+      FWD.score[which(poly.ref==FWD[i])-i+1+length(FWD)]=FWD.score[which(poly.ref==FWD[i])-i+1+length(FWD)]+(1/length(FWD))
+      FWD.score[which(poly.ref!=FWD[i] & poly.ref!='x')-i+1+length(FWD)]=FWD.score[which(poly.ref!=FWD[i] & poly.ref!='x')-i+1+length(FWD)]-(1/length(FWD)/10)
+      REV.score[which(poly.ref==REV[i])-i+1+length(REV)]=REV.score[which(poly.ref==REV[i])-i+1+length(REV)]+(1/length(REV))
+      REV.score[which(poly.ref!=REV[i] & poly.ref!='x')-i+1+length(REV)]=REV.score[which(poly.ref!=REV[i] & poly.ref!='x')-i+1+length(REV)]-(1/length(REV)/10)
+    }
+    res=data.frame('fwd'=FWD.score,'rev'=REV.score)
+    return(res)
+  }
+
+  if(nchar(read)<min(read.length) | nchar(read)>max(read.length)){
+    DATA='blank' # bypasses polymers outside desired length range
+  } else {
+    if((length(Cm)+length(Chm))!=length(C.key)){
+      show('WARNING! Read MM and ML tag info are different lengths...skipping read!')
+      DATA='blank'
+    }else{
+      #
+      NN=round(nchar(read)/mean(c(length(FWD),length(REV)))+0.4)+padding # sets the maximum number of fragments allowed to be mapped to the polymer
+      poly.ref=str_split(read,'')[[1]]
+      Chm.ids=which(poly.ref=='C')[Chm]
+      Cm.ids=which(poly.ref=='C')[Cm]
+      Chm.scores=C.key[1:length(Chm)]
+      Cm.scores=C.key[(length(Chm)+1):(length(Chm)+length(Cm))]
+      COUNTER=1
+      #
+      FWD.align=matrix('x',nrow=NN,ncol = length(FWD)); colnames(FWD.align)<-paste0(FWD,'.',1:length(FWD))
+      REV.align=matrix('x',nrow=NN,ncol = length(REV)); colnames(REV.align)<-paste0(REV,'.',1:length(REV))
+      FWD.Chm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
+      REV.Chm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
+      FWD.Cm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
+      REV.Cm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
+      FWD.I=matrix(0,nrow=NN,ncol = length(FWD))
+      REV.I=matrix(0,nrow=NN,ncol = length(REV))
+      Q=as.data.frame(matrix(NA,nrow=NN,ncol = 3));colnames(Q) <- c('comp','match','id')
+      #
+      perf.matches=find.motif(read,Cm,Chm,C.key,read.length,FWD,REV)
+      if(perf.matches[['Nfrag']]==1){
+        FWD.align[COUNTER,]=perf.matches[['FWD.align']]
+        REV.align[COUNTER,]=perf.matches[['REV.align']]
+        FWD.Chm[COUNTER,]=perf.matches[['FWD.Chm']]
+        REV.Chm[COUNTER,]=perf.matches[['REV.Chm']]
+        FWD.Cm[COUNTER,]=perf.matches[['FWD.Cm']]
+        REV.Cm[COUNTER,]=perf.matches[['REV.Cm']]
+        FWD.I[COUNTER,]=perf.matches[['FWD.I']]
+        REV.I[COUNTER,]=perf.matches[['REV.I']]
+        Q[COUNTER,]=perf.matches[['Q']]
+        #
+        poly.ref[as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]='x'
+        Chm.scores[Chm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
+        Cm.scores[Cm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
+        COUNTER=COUNTER+1
+      }
+      if(perf.matches[['Nfrag']]>1){
+        FWD.align[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['FWD.align']]
+        REV.align[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['REV.align']]
+        FWD.Chm[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['FWD.Chm']]
+        REV.Chm[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['REV.Chm']]
+        FWD.Cm[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['FWD.Cm']]
+        REV.Cm[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['REV.Cm']]
+        FWD.I[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['FWD.I']]
+        REV.I[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['REV.I']]
+        Q[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['Q']]
+        #
+        poly.ref[as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]='x'
+        Chm.scores[Chm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
+        Cm.scores[Cm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
+        COUNTER=COUNTER+perf.matches[['Nfrag']]
+      }
+      #
+      if(COUNTER<=NN){
+        for (j in COUNTER:NN){
+          if(sum(poly.ref!="x")<10){
+            break # terminates further alignment attempts when less than 10 bases in the polymer remain unmapped
+          }
+          #
+          align.scores=get.scores(poly.ref,FWD,REV)
+          if(max(align.scores$fwd)>=max(align.scores$rev)){
+            edges=bounds(c(rep('x',times=length(FWD)),poly.ref,rep('x',times=length(FWD)))[(which.max(align.scores$fwd)):(which.max(align.scores$fwd)+length(FWD)-1)]==FWD)
+            if(is.null(edges)){
+              break
+            }
+            FWD.align[j,which(edges)]=poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
+            FWD.Chm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Chm.ids]]=Chm.scores[Chm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
+            FWD.Cm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Cm.ids]]=Cm.scores[Cm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
+            FWD.I[j,which(edges)]=(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)
+            #
+            Q[j,1]=sum(edges)/length(FWD)
+            Q[j,2]=mean(poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]==FWD[edges])
+            Q[j,3]='FWD'
+            #
+            Chm.scores[Chm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]=NA
+            Cm.scores[Cm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]=NA
+            poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]='x'
+          }
+          if(max(align.scores$fwd)<max(align.scores$rev)){
+            edges=bounds(c(rep('x',times=length(REV)),poly.ref,rep('x',times=length(REV)))[(which.max(align.scores$rev)):(which.max(align.scores$rev)+length(REV)-1)]==REV)
+            if(is.null(edges)){
+              break
+            }
+            REV.align[j,which(edges)]=poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]
+            REV.Chm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Chm.ids)]]=Chm.scores[Chm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
+            REV.Cm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Cm.ids)]]=Cm.scores[Cm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
+            REV.I[j,which(edges)]=(which.max(align.scores$rev)-length(REV)+which(edges)-1)
+            #
+            Q[j,1]=sum(edges)/length(REV)
+            Q[j,2]=mean(poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]==REV[edges])
+            Q[j,3]='REV'
+            #
+            Chm.scores[Chm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]=NA
+            Cm.scores[Cm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]=NA
+            poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]='x'
+          }
+        }
+      }
+
+      # save relevant data from read to subset of stable variable
+      DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q),'FWD.I'=FWD.I,'REV.I'=REV.I)
+
+    }
+  }
+
+  return(DATA)
+
+}
+
+# Deprecated fragment mapping algorithm
+OLDmap <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
   bounds <- function(data){
     slideSum <- function(x,n=1){
