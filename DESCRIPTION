@@ -1,7 +1,7 @@
 Package: MeLoELF
 Type: Package
 Title: Tools to Analyze MeLoELF-seq Data
-Version: 0.0.0
+Version: 1.1.0
 Authors: Wayne O. Hemphill (wayne.hemphill@colorado.edu) & Ella Tommer
 Description: Includes functions for analyzing and plotting MeLoELF-seq experiments (Nanopore sequencing of oligomerized methylation reaction products). 
 Imports: stringr, foreach, doParallel, pracma, data.table
