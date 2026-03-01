@@ -33,6 +33,7 @@ MeLoELF <- function(parent,
                     padding=2,
                     completeness=0.3,
                     matching=0.9,
+                    exact.search=F,
                     align.file='align.RData',
                     processed.file='processed.RData',
                     seq.file='sequences.txt',
@@ -61,6 +62,79 @@ library(data.table)
 #######################
 ## Create custom functions for later analysis
 #######################
+
+# Exact motif search algorithm
+find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
+
+  if(nchar(read)<min(read.length) | nchar(read)>max(read.length)){
+    DATA='blank' # bypasses polymers outside desired length range
+  } else {
+    polymer=str_split(read,pattern = '')[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
+    Cm.ids=which(polymer=='C')[Cm]
+    Cm.scores=C.key[(length(Chm)+1):(length(Chm)+length(Cm))]
+    Chm.ids=which(polymer=='C')[Chm]
+    Chm.scores=C.key[1:length(Chm)]
+    #
+    FWD.match=which(polymer==FWD[1])
+    REV.match=which(polymer==REV[1])
+    for(i in 2:length(FWD)){
+      FWD.match=FWD.match[(FWD.match %in% (which(polymer==FWD[i])-i+1))]
+      REV.match=REV.match[(REV.match %in% (which(polymer==REV[i])-i+1))]
+    }
+    #
+    if(length(c(FWD.match,REV.match))>0){
+      FWD.align=matrix(c(rep(FWD,times=length(FWD.match)),rep('x',times=length(FWD)*length(REV.match))),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T)
+      colnames(FWD.align) <- paste0(FWD,'.',1:length(FWD))
+      REV.align=matrix(c(rep('x',times=length(REV)*length(FWD.match)),rep(REV,times=length(REV.match))),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T)
+      colnames(REV.align) <- paste0(REV,'.',1:length(REV))
+      #
+      quality=cbind('comp'=rep(1,times=length(c(FWD.match,REV.match))),'match'=rep(1,times=length(c(FWD.match,REV.match))),'id'=rep(c('FWD','REV'),times=c(length(FWD.match),length(REV.match))))
+      #
+      FWD.I=matrix(c(FWD.match-1,rep(0,times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD))+matrix(c(rep(1:length(FWD),times=length(FWD.match)),rep(0,times=length(FWD.match)*length(FWD))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD),byrow = T)
+      REV.I=matrix(c(rep(0,times=length(FWD.match)),REV.match-1),nrow = length(c(FWD.match,REV.match)),ncol = length(REV))+matrix(c(rep(0,times=length(FWD.match)*length(FWD)),rep(1:length(REV),times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(REV),byrow = T)
+      #
+      FWD.Chm=t(matrix(sqrt((FWD=='C')-1),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T))
+      REV.Chm=t(matrix(sqrt((REV=='C')-1),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T))
+      FWD.Cm=FWD.Chm
+      REV.Cm=REV.Chm
+      FWD.Chm[t(FWD.I) %in% Chm.ids]=Chm.scores
+      REV.Chm[t(REV.I) %in% Chm.ids]=Chm.scores
+      FWD.Cm[t(FWD.I) %in% Cm.ids]=Cm.scores
+      REV.Cm[t(REV.I) %in% Cm.ids]=Cm.scores
+      FWD.Chm=t(FWD.Chm)
+      REV.Chm=t(REV.Chm)
+      FWD.Cm=t(FWD.Cm)
+      REV.Cm=t(REV.Cm)
+      if(length(REV.match)>0 & length(c(REV.match,FWD.match))>1){
+        FWD.Chm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
+        FWD.Cm[(length(FWD.match)+1):(length(REV.match)+length(FWD.match)),]=NA
+      }
+      if(length(FWD.match)>0 & length(c(REV.match,FWD.match))>1){
+        REV.Chm[1:length(FWD.match),]=NA
+        REV.Cm[1:length(FWD.match),]=NA
+      }
+      if(length(REV.match)>0 & length(c(REV.match,FWD.match))==1){
+        FWD.Chm[]=NA
+        FWD.Cm[]=NA
+      }
+      if(length(FWD.match)>0 & length(c(REV.match,FWD.match))==1){
+        REV.Chm[]=NA
+        REV.Cm[]=NA
+      }
+      colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
+      colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
+      colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
+      colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
+      #
+      #
+      DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=FWD.I,'REV.I'=REV.I,'Nfrag'=length(c(FWD.match,REV.match)))
+    }else{
+      DATA=list('Nfrag'=0)
+    }
+    #
+  }
+  return(DATA)
+}
 
 # Fragment mapping algorithm
 map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
@@ -92,8 +166,8 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     test.Cm=test.Chm
     test.Chm[which(test.0=='C')] = 0 # sets the default methylation score for all Cs in the polymer to zero
     test.Cm[which(test.0=='C')] = 0
-    try(test.Chm[which(test.0=='C')[Chm]]<-C.key[1:(0.5*length(C.key))]) # writes over methylation scores for annotated Cs in the polymer
-    try(test.Cm[which(test.0=='C')[Cm]]<-C.key[(0.5*length(C.key)+1):length(C.key)])
+    try(test.Chm[which(test.0=='C')[Chm]]<-C.key[1:length(Chm)]) # writes over methylation scores for annotated Cs in the polymer
+    try(test.Cm[which(test.0=='C')[Cm]]<-C.key[(length(Chm)+1):(length(Chm)+length(Cm))])
     test.Chm=c(rep(NA,times=length(FWD)),test.Chm,rep(NA,times=length(FWD))) # adds empty flanks to the edges of methyl score vectors, in preparation for sliding alignment
     test.Cm=c(rep(NA,times=length(FWD)),test.Cm,rep(NA,times=length(FWD)))
     test.00=c(rep("x",times=length(FWD)),test.0,rep("x",times=length(FWD))) # adds empty flanks to edges of sequence vector, in preparation for sliding alignment
@@ -220,7 +294,7 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     quality=cbind(comp,match,id)
 
     # save relevant data from read to subset of stable variable
-    DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=abs(FWD.refs),'REV.I'=abs(REV.refs))
+    DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=abs(FWD.refs)-length(FWD),'REV.I'=abs(REV.refs)-length(REV))
 
   }
 
@@ -581,11 +655,13 @@ pdf.make <- function(data,pars=NULL){
 
 # generate modkit summary-like statistics
 modk.sum <- function(melo,meca,seqq,thresh,methyl.type){
-  melo.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
-  meca.set=matrix(as.numeric((str_split(meca,pattern = ',')[[1]])[-1]),nrow=2,ncol = length(melo.id),byrow = T)
+  meloCH.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
+  meloCM.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
+  meca.set=as.numeric((str_split(meca,pattern = ',')[[1]])[-1])
   Nc=sum(str_split(seqq,pattern = '')[[1]]=='C',na.rm = T)
   Cm.scores=matrix(0,nrow=2,ncol=Nc)
-  Cm.scores[,melo.id]=meca.set/256
+  Cm.scores[1,meloCH.id]=meca.set[1:length(meloCH.id)]/256
+  Cm.scores[2,meloCM.id]=meca.set[(length(meloCH.id)+1):(length(meloCH.id)+length(meloCM.id))]/256
   if(methyl.type=='B'){
     res=mean(colSums(Cm.scores)>=thresh)
   }
@@ -596,7 +672,7 @@ modk.sum <- function(melo,meca,seqq,thresh,methyl.type){
     res=mean(Cm.scores[1,]>=thresh)
   }
   return(data.frame('pC'=res,'Nc'=Nc))
-  
+
 }
 
 # Save relevant parameters
@@ -646,30 +722,32 @@ if(crunch.too){
   Chm=str_split(raw.2[,1],',')
   Cm=str_split(raw.2[,2],',')
   C.key=str_split(raw.3[,1],',')
-  for (i in 1:length(C.key)){
-    Chm[[i]]=as.numeric(Chm[[i]][-1])
-    Cm[[i]]=as.numeric(Cm[[i]][-1])
-    C.key[[i]]=round(as.numeric(C.key[[i]][-1])/256,2)
-    Chm[[i]]=cumsum(Chm[[i]]+1)
-    Cm[[i]]=cumsum(Cm[[i]]+1)
-  }
 
   # loop to perform parallelized alignments with scoring on a per-read basis
   registerDoParallel(detectCores())
-  DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
-
-    map.fragments(read=raw[seq,1],Cm[[seq]],Chm[[seq]],C.key[[seq]],read.length=read.length,FWD=FWD,REV=REV)
-
+  if(exact.search){
+    DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
+      find.motif(read=raw[seq,1],Cm = cumsum(as.numeric(Cm[[seq]][-1])+1),Chm = cumsum(as.numeric(Chm[[seq]][-1])+1),round(as.numeric(C.key[[seq]][-1])/256,2),read.length=read.length,FWD=FWD,REV=REV)
+    }
+  }else{
+    DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
+      map.fragments(read=raw[seq,1],Cm = cumsum(as.numeric(Cm[[seq]][-1])+1),Chm = cumsum(as.numeric(Chm[[seq]][-1])+1),round(as.numeric(C.key[[seq]][-1])/256,2),read.length=read.length,FWD=FWD,REV=REV)
+    }
   }
 
   # get lengths of reads
   lengths.of.reads <- nchar(raw$V1)
 
   # get fragment numbers
-  READS <- round(nchar(raw$V1)/length(FWD)+0.4)+padding
+  if(exact.search){
+    READS = rep(NA,times=length(raw$V1))
+    READS[lengths.of.reads>=read.length[1] & lengths.of.reads<=read.length[2]] <- as.numeric(do.call(args = lapply(DATA[lengths.of.reads>=read.length[1] & lengths.of.reads<=read.length[2]],'[[','Nfrag'),what = 'c'))
+  }else{
+    READS <- round(nchar(raw$V1)/length(FWD)+0.4)+padding
+  }
 
   # add final useful data to end of stable variable
-  DATA[['N']]=sum(as.numeric(READS[lengths.of.reads>=read.length[1] & lengths.of.reads<=read.length[2]]))
+  DATA[['N']]=sum(as.numeric(READS[lengths.of.reads>=read.length[1] & lengths.of.reads<=read.length[2]]))+sum(READS==0,na.rm = T)
   DATA[['FWD']]=FWD
   DATA[['REV']]=REV
   DATA[['RLs']]=as.numeric(lengths.of.reads)
@@ -726,30 +804,91 @@ if(process){
     if(DATA[i]=='blank'){
       next
     }
-
-    FWD.Chm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['FWD.Chm']]
-    REV.Chm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['REV.Chm']]
-    FWD.Cm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['FWD.Cm']]
-    REV.Cm[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=DATA[[i]][['REV.Cm']]
-    Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),1:3]=DATA[[i]][['Q']]
-    Q.reads[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),4]=i
-    FWD.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['FWD.I']])-length(DATA[['FWD']])
-    REV.index[COUNTER:(COUNTER+nrow(DATA[[i]][['Q']])-1),]=abs(DATA[[i]][['REV.I']])-length(DATA[['REV']])
-    mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
-    mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
-    if(pre.ligated){
-      remapped.reads$Acc[i]=sum(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']]) == c(matrix(c(DATA[['FWD']],DATA[['REV']]),nrow = nrow(DATA[[i]][['REV.align']]),ncol = length(c(DATA[['FWD']],DATA[['REV']])),byrow = T)),na.rm = T)/sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))
-      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
-        remapped.reads$Strand[i]='FWD'
+    if(!is.null(DATA[[i]][['Nfrag']])){
+      if(DATA[[i]][['Nfrag']]==0){
+        FWD.index[COUNTER,]=rep(0,times=length(DATA[['FWD']]))
+        REV.index[COUNTER,]=rep(0,times=length(DATA[['REV']]))
+        Q.reads[COUNTER,4]=i
+        mapped.frac[i]=0
+        mapped.frac2[i]=0
+        COUNTER=COUNTER+1
       }
-      if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
-        remapped.reads$Strand[i]='REV'
+      if(DATA[[i]][['Nfrag']]==1){
+        FWD.Chm[COUNTER,]=DATA[[i]][['FWD.Chm']]
+        REV.Chm[COUNTER,]=DATA[[i]][['REV.Chm']]
+        FWD.Cm[COUNTER,]=DATA[[i]][['FWD.Cm']]
+        REV.Cm[COUNTER,]=DATA[[i]][['REV.Cm']]
+        Q.reads[COUNTER,1:3]=DATA[[i]][['Q']]
+        Q.reads[COUNTER,4]=i
+        FWD.index[COUNTER,]=DATA[[i]][['FWD.I']]
+        REV.index[COUNTER,]=DATA[[i]][['REV.I']]
+        mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+        mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+        if(pre.ligated){
+          remapped.reads$Acc[i]=1
+          if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+            remapped.reads$Strand[i]='FWD'
+          }
+          if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+            remapped.reads$Strand[i]='REV'
+          }
+          if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) >0 & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) > 0){
+            remapped.reads$Strand[i]='Het'
+          }
+        }
+        COUNTER=COUNTER+1
       }
-      if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) >0 & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) > 0){
-        remapped.reads$Strand[i]='Het'
+      if(DATA[[i]][['Nfrag']]>1){
+        FWD.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Chm']]
+        REV.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Chm']]
+        FWD.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Cm']]
+        REV.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Cm']]
+        Q.reads[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),1:3]=DATA[[i]][['Q']]
+        Q.reads[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),4]=i
+        FWD.index[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.I']]
+        REV.index[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.I']]
+        mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+        mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+        if(pre.ligated){
+          remapped.reads$Acc[i]=sum(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']]) == c(matrix(c(DATA[['FWD']],DATA[['REV']]),nrow = nrow(DATA[[i]][['REV.align']]),ncol = length(c(DATA[['FWD']],DATA[['REV']])),byrow = T)),na.rm = T)/sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))
+          if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+            remapped.reads$Strand[i]='FWD'
+          }
+          if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+            remapped.reads$Strand[i]='REV'
+          }
+          if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) >0 & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) > 0){
+            remapped.reads$Strand[i]='Het'
+          }
+        }
+        COUNTER=COUNTER+nrow(DATA[[i]]$Q)
       }
     }
-    COUNTER=COUNTER+nrow(DATA[[i]]$Q)
+    if(is.null(DATA[[i]][['Nfrag']])){
+      FWD.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Chm']]
+      REV.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Chm']]
+      FWD.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Cm']]
+      REV.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Cm']]
+      Q.reads[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),1:3]=DATA[[i]][['Q']]
+      Q.reads[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),4]=i
+      FWD.index[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.I']]
+      REV.index[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.I']]
+      mapped.frac[i]=sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+      mapped.frac2[i]=sum(na.omit(c(DATA[[i]][['FWD.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),],DATA[[i]][['REV.align']][which(DATA[[i]][['Q']][,1]>=completeness & DATA[[i]][['Q']][,2]>=matching),])) %in% c('A','C','T','G'))/DATA[['RLs']][i]
+      if(pre.ligated){
+        remapped.reads$Acc[i]=sum(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']]) == c(matrix(c(DATA[['FWD']],DATA[['REV']]),nrow = nrow(DATA[[i]][['REV.align']]),ncol = length(c(DATA[['FWD']],DATA[['REV']])),byrow = T)),na.rm = T)/sum(na.omit(c(DATA[[i]][['FWD.align']],DATA[[i]][['REV.align']])) %in% c('A','C','T','G'))
+        if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+          remapped.reads$Strand[i]='FWD'
+        }
+        if(sum(DATA[[i]]$Q[,3]=='REV',na.rm = T)==sum(!is.na(DATA[[i]]$Q[,3]))){
+          remapped.reads$Strand[i]='REV'
+        }
+        if(sum(DATA[[i]]$Q[,3]=='FWD',na.rm = T) >0 & sum(DATA[[i]]$Q[,3]=='REV',na.rm = T) > 0){
+          remapped.reads$Strand[i]='Het'
+        }
+      }
+      COUNTER=COUNTER+nrow(DATA[[i]]$Q)
+    }
 
   }
   FWD.index[FWD.index<0]=NA
@@ -855,7 +994,7 @@ if(process){
     #
     save(data.actual.fwd,data.actual.rev,file = processed.file)
   }
-  
+
   #######################
   ## Processivity Analysis and Graphing
   #######################
@@ -944,7 +1083,7 @@ if(process){
 
   save(matrices, file="methylation_matrices.RDS")
   write.csv(summary, "survival_summary.csv")
-  
+
   # calculate Modkit-like overall methylation for reads
   check.melo=fread(file = melo.file,header = F,sep = ';',fill = T)[,-3]
   check.meca=fread(file = meca.file,header = F,sep = ';')[,1]
@@ -968,7 +1107,7 @@ if(process){
   used.modk=sum(modk.dat$pC[used.set]*modk.dat$Nc[used.set],na.rm = T)/sum(modk.dat$Nc[used.set])
   filt.modk=sum(modk.dat$pC[-used.set]*modk.dat$Nc[-used.set],na.rm = T)/sum(modk.dat$Nc[-used.set])
   rm(modk.dat)
-  
+
   # quality control analyses
   if(!pre.ligated){
     read.filt=nrow(data.actual.rev)/sum(Q.reads[,3]=='REV',na.rm = T)
@@ -1037,14 +1176,20 @@ if(process){
     axis(side = 1,at = c(0:6)*5+2,labels = paste0(DATA[['FWD']][FWD.sites],'p',DATA[['FWD']][FWD.sites+1],'-',FWD.sites+0.5),cex.axis=1.1)
     abline(h=fMs.rev,col='red',lty='dashed',lwd=2)
     abline(h=fSs.rev,col='purple',lty='dashed',lwd=2)
-    abline(h=read.filt,col='orange',lty='dotted',lwd=2)
+    if(!exact.search){
+      abline(h=read.filt,col='orange',lty='dotted',lwd=2)
+    }
     abline(h=pMAP,col='cyan',lty='dotted',lwd=2)
     points(c(0:6)*5+0.5,fCpGs.fwd,type='h',pch=22,lwd=15,col=1)
     points(c(0:6)*5+1.5,fCpGs.rev,type='h',pch=22,lwd=15,col=2)
     points(c(0:6)*5+2.5,f53m.rev,type='h',pch=22,lwd=15,col=3)
     points(c(0:6)*5+3.5,f35m.rev,type='h',pch=22,lwd=15,col=4)
     legend('topright',legend=c(paste0(plot.nom,' Methyls'),"5'->3' Start","3'->5' Start"),col=1:4,fill=1:4,cex=0.8,bty = 'n')
-    text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+    if(exact.search){
+      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62),pos = 2,col = c('red','purple'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev)),c('% CpG','% Sub.')))
+    }else{
+      text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.72,0.62,0.52),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
+    }
     text(x=0,y=0.975,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
     text(x=2*length(FWD.sites),y=0.975,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5m(h)C'),col='black',cex=1.3)
     #

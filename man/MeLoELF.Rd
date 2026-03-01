@@ -23,6 +23,7 @@ MeLoELF(parent,
         padding=2,
         completeness=0.3,
         matching=0.9,
+        exact.search=F,
         align.file='align.RData',
         processed.file='processed.RData',
         seq.file='sequences.txt',
@@ -59,6 +60,7 @@ Defaults:
 \item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
 \item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.3.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
+\item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search (see Details before using); DEFAULT -- F.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}
 \item{seq.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read sequences; DEFAULT -- 'sequences.txt'.}
@@ -75,6 +77,8 @@ Defaults:
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
+
+{exact.search} -- {This parameter alters the mapping algorithm to a simple motif search, which drastically shortens fragment extraction time by only scanning each read for exact matches to the FWD/parent and REV/target sequences. The format of almost all data structures and output are conserved, with the exception of fragment quality filtering-related metrics. Relatedly, unless used in conjunction with pre.ligated=T, using this setting deprecates the completeness and matching parameters.}
 
 {pre.ligated} -- {This parameter is intended for niche applications with enzymes acting on hemi-methylated substrate. If pre.ligated=T, mapped fragments are computationally reconstructed into their original read polymers, sorted into FWD and REV homopolymers, filtered according to their read mapping and coverage quality, then collapsed into vectors of only their indexed CpG sites for analysis. This option ignores the var.thresh parameter entirely, and it repurposes the completeness and matching parameters during polymer filtering for read coverage and mapped section basematch accuracy metrics, respectively. In addition, only the methylation_survival plot and a rudimentary version of the QCgraphs plot are exported.}
 
