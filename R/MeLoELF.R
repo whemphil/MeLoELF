@@ -1199,32 +1199,32 @@ if(process){
   #
   par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
   f=1
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = paste0(plot_title,'Fragment Positions: Relative to Read'))
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = paste0(plot_title,'Fragment Positions: Relative to Read'))
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   legend('topright',legend = c('Both',plot.nom),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
   #
   par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
   f=2
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'From Nearest Edge')
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'From Nearest Edge')
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
   f=3
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 5' End")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 5' End")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
   f=4
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 3' End")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 3' End")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
   f=5
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "From Read Center")
+  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "From Read Center")
   lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
