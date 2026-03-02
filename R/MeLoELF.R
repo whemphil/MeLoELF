@@ -51,6 +51,32 @@ MeLoELF <- function(parent,
 setwd(mdir)
 
 #######################
+## Give errors & warnings for input
+#######################
+
+# ERRORS
+if(nchar(parent)!=nchar(target)){
+  stop('ERROR! The inputted FWD/parent and REV/target reference sequences are different lengths. MeLoELF only supports analysis of blunt-end substrates.')
+}
+
+# WARNINGS
+if(exact.search){
+  warning('Motif-based search enabled...the fix.indel, completeness, matching, and padding parameters will be ignored.')
+}
+if(pre.ligated){
+  warning('Fragment re-oligomerization enabled...the completeness and matching parameters will be repurposed.')
+}
+if(!is.null(read.length) & !exact.search){
+  warning('WARNING:  Mapping long reads without the motif search algorithm drastically increases computational time.')
+}
+if(var.thresh==2){
+  warning('Per-site thresholding enabled...the BM.strand.data parameter will be ignored.')
+}
+if(length(FWD.sites) != length(REV.sites)){
+  warning('WARNING:  The FWD/parent and REV/target strands have different numbers of methylation sites...some analyses may be affected adversely.')
+}
+  
+#######################
 ## Load necessary non-base packages
 #######################
 
