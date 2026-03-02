@@ -24,6 +24,8 @@ MeLoELF(parent,
         completeness=0.7,
         matching=0.9,
         fix.indel=T,
+        ins.tol=1,
+        modk.fillC=F,
         exact.search=F,
         align.file='align.RData',
         processed.file='processed.RData',
@@ -62,6 +64,8 @@ Defaults:
 \item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.7.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{fix.indel}{A logical indicating whether fragments with indels, which are initially mapped as separate fragments, should be stitched back into a single fragment right after mapping; DEFAULT -- T.}
+\item{ins.tol}{An integer giving the maximum number of base insertions to tolerate when re-stitching fragments during fix.indel=T procedures; DEFAULT -- 1.}
+\item{modk.fillC}{A logical indicating whether, during Modkit-like methylation statistic calculations in QCgraphs output, un-indexed Cs in read sequences should be filled with zero methyl score values instead of only using ML:B:C values in the parent SAM file; DEFAULT -- F.}
 \item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search (see Details before using); DEFAULT -- F.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}

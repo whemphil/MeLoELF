@@ -34,6 +34,8 @@ MeLoELF <- function(parent,
                     completeness=0.7,
                     matching=0.9,
                     fix.indel=T,
+                    ins.tol=1,
+                    modk.fillC=F,
                     exact.search=F,
                     align.file='align.RData',
                     processed.file='processed.RData',
@@ -99,7 +101,7 @@ indel.fix <- function(DATA,FWD,REV){
         if(fID[i]==fID[i+1]){
           if(sum(which(!is.na(c(FWD.I[i,],REV.I[i,]))) %in% which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))==0){
             if(mean(which(!is.na(c(FWD.I[i,],REV.I[i,])))) < mean(which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))){
-              if(diff(range(na.omit(c(FWD.I[i:(i+1),],REV.I[i:(i+1),]))))<=(ncol(FWD.I)+1)){
+              if(diff(range(na.omit(c(FWD.I[i:(i+1),],REV.I[i:(i+1),]))))<=(ncol(FWD.I)+ins.tol)){
                 res$indel[i]=T
                 res$id[i]=fID[i]
               }else{
@@ -757,25 +759,42 @@ pdf.make <- function(data,pars=NULL){
 }
 
 # generate modkit summary-like statistics
-modk.sum <- function(melo,meca,seqq,thresh,methyl.type){
-  meloCH.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
-  meloCM.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
-  meca.set=as.numeric((str_split(meca,pattern = ',')[[1]])[-1])
-  Nc=sum(str_split(seqq,pattern = '')[[1]]=='C',na.rm = T)
-  Cm.scores=matrix(0,nrow=2,ncol=Nc)
-  Cm.scores[1,meloCH.id]=meca.set[1:length(meloCH.id)]/256
-  Cm.scores[2,meloCM.id]=meca.set[(length(meloCH.id)+1):(length(meloCH.id)+length(meloCM.id))]/256
-  if(methyl.type=='B'){
-    res=mean(colSums(Cm.scores)>=thresh)
+modk.sum <- function(melo,meca,seqq,thresh,methyl.type,fill.Cs){
+  if(!fill.Cs){
+    meca.set=as.numeric((str_split(meca,pattern = ',')[[1]])[-1])
+    Nc=length(meca.set)/2
+    Cm.scores=matrix(NA,nrow=2,ncol=Nc)
+    Cm.scores[1,]=meca.set[1:Nc]/256
+    Cm.scores[2,]=meca.set[(Nc+1):(2*Nc)]/256
+    if(methyl.type=='B'){
+      res=mean(colSums(Cm.scores)>=thresh)
+    }
+    if(methyl.type=='M'){
+      res=mean(Cm.scores[2,]>=thresh)
+    }
+    if(methyl.type=='H'){
+      res=mean(Cm.scores[1,]>=thresh)
+    }
+    return(data.frame('pC'=res,'Nc'=Nc))
+  }else{
+    meloCH.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
+    meloCM.id=cumsum(as.numeric((str_split(melo[,1],pattern = ',')[[1]])[-1])+1)
+    meca.set=as.numeric((str_split(meca,pattern = ',')[[1]])[-1])
+    Nc=sum(str_split(seqq,pattern = '')[[1]]=='C',na.rm = T)
+    Cm.scores=matrix(0,nrow=2,ncol=Nc)
+    Cm.scores[1,meloCH.id]=meca.set[1:length(meloCH.id)]/256
+    Cm.scores[2,meloCM.id]=meca.set[(length(meloCH.id)+1):(length(meloCH.id)+length(meloCM.id))]/256
+    if(methyl.type=='B'){
+      res=mean(colSums(Cm.scores)>=thresh)
+    }
+    if(methyl.type=='M'){
+      res=mean(Cm.scores[2,]>=thresh)
+    }
+    if(methyl.type=='H'){
+      res=mean(Cm.scores[1,]>=thresh)
+    }
+    return(data.frame('pC'=res,'Nc'=Nc))
   }
-  if(methyl.type=='M'){
-    res=mean(Cm.scores[2,]>=thresh)
-  }
-  if(methyl.type=='H'){
-    res=mean(Cm.scores[1,]>=thresh)
-  }
-  return(data.frame('pC'=res,'Nc'=Nc))
-
 }
 
 
@@ -1252,12 +1271,12 @@ if(process){
   registerDoParallel(detectCores())
   if(var.thresh<2 | pre.ligated){
     modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
-      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = thresh)
+      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = thresh,fill.Cs = modk.fillC)
     }
   }
   if(var.thresh==2 & !(pre.ligated)){
     modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
-      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = mean(threshIrev))
+      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = mean(threshIrev),fill.Cs = modk.fillC)
     }
   }
   rm(check.meca,check.melo,check.seq)
