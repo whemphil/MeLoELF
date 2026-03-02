@@ -21,8 +21,9 @@ MeLoELF(parent,
         target_fwd_auc=0.9,
         read.length=NULL,
         padding=2,
-        completeness=0.3,
+        completeness=0.7,
         matching=0.9,
+        fix.indel=T,
         exact.search=F,
         align.file='align.RData',
         processed.file='processed.RData',
@@ -58,8 +59,9 @@ Defaults:
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- scales lower bound to half the REV/target sequence length, and upper bound to the 98th percentile of SAM file read lengths.}
 \item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
-\item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.3.}
+\item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.7.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
+\item{fix.indel}{A logical indicating whether fragments with indels, which are initially mapped as separate fragments, should be stitched back into a single fragment right after mapping; DEFAULT -- T.}
 \item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search (see Details before using); DEFAULT -- F.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}
@@ -77,6 +79,8 @@ Defaults:
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
+
+{fix.indel} -- {Can repair large deletions, but will only fix insertions if they are a single base. Parameter is ignored if crunch.too=F or exact.search=T, and if fix.indel=F, the QCgraphsC plot wil not be exported.}
 
 {exact.search} -- {This parameter alters the mapping algorithm to a simple motif search, which drastically shortens fragment extraction time by only scanning each read for exact matches to the FWD/parent and REV/target sequences. The format of almost all data structures and output are conserved, with the exception of fragment quality filtering-related metrics. Relatedly, unless used in conjunction with pre.ligated=T, using this setting deprecates the completeness and matching parameters.}
 
@@ -156,13 +160,17 @@ In the case of a manual thresholding override, the methyl scores of all sites an
 
 Phase 5:  Methylation State Analyses
 
-The first analysis output file, QCgraphs, contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), FWD and REV fragments passing quality filtering (“Qual.”), and the total coverage of mapped reads before and after fragment quality filtering ("Map").
+The first analysis output file, QCgraphs, contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), FWD and REV fragments passing quality filtering (“Qual.”), the total coverage of mapped reads before and after fragment quality filtering ("Map"), and the percentage of methylation in all Cs across all reads, just mapped reads, and just unmapped reads ("5(h)mC").
 
 The second analysis output file, QCgraphsB, contains distribution plots of mapped fragment positions (that pass quality filtering). The metrics for fragment position are “Relative to Read”, which plots location of the fragment’s center relative to its parent read length, “From Nearest Edge”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from its parent read’s closest 5’ or 3’ end, “From 5’/3’ End”, which plot the same metric but from a specific parent read end, and “From Read Center”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from the center of its parent read. Probability density functions are provided for both the combined and separate FWD and REV fragment positional data.
 
-The third analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+The third analysis output file, QCgraphsC, contains data on the prevalence of correct basecalls, incorrect basecalls, and deletions across both substrate sequences.
 
-The fourth analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
+The fourth analysis output file, QCgraphsD, contains data on the propensity for FWD and REV fragments to exist heterogeneously versus homogeneously within read polymers.
+
+The fifth analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+
+The sixth analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
 
 }
 
@@ -183,8 +191,10 @@ Graphs:
 
 \item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
 \item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
-\item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent substrate molecule methylation, percent of mapped fragments passing quality control filtering, and percent coverage of mapped reads before and after fragment quality filtering.}
+\item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent substrate molecule methylation, percent of mapped fragments passing quality control filtering, percent coverage of mapped reads before and after fragment quality filtering, and Modkit Summary-like statistics on percent methylation across all sequenced Cs in all reads, just mapped reads, and just unmapped reads.}
 \item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
+\item{QCgraphsC.png}{A plot that shows the frequency of sequencing miscalls and deletions across every base of the substrate sequences.}
+\item{QCgraphsD.png}{A plot of the bias in reads' fragment compositions pre- and post-quality filtering of the fragments.}
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }

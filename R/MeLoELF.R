@@ -31,8 +31,9 @@ MeLoELF <- function(parent,
                     target_fwd_auc=0.9,
                     read.length=NULL,
                     padding=2,
-                    completeness=0.3,
+                    completeness=0.7,
                     matching=0.9,
+                    fix.indel=T,
                     exact.search=F,
                     align.file='align.RData',
                     processed.file='processed.RData',
@@ -63,6 +64,89 @@ library(data.table)
 ## Create custom functions for later analysis
 #######################
 
+# Indel repair algorithm
+indel.fix <- function(DATA,FWD,REV){
+  find.indel <- function(FWD.I,REV.I,fID){
+    res=data.frame('indel'=rep(NA,times=length(fID)),'id'=rep(NA,times=length(fID)))
+    for(i in 1:(length(fID)-1)){
+      if(!is.na(fID[i]) & !is.na(fID[i+1])){
+        if(fID[i]==fID[i+1]){
+          if(sum(which(!is.na(c(FWD.I[i,],REV.I[i,]))) %in% which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))==0){
+            if(mean(which(!is.na(c(FWD.I[i,],REV.I[i,])))) < mean(which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))){
+              if(diff(range(na.omit(c(FWD.I[i:(i+1),],REV.I[i:(i+1),]))))<=(ncol(FWD.I)+1)){
+                res$indel[i]=T
+                res$id[i]=fID[i]
+              }else{
+                res$indel[i]=F
+              }
+            }else{
+              res$indel[i]=F
+            }
+          }else{
+            res$indel[i]=F
+          }
+        }else{
+          res$indel[i]=F
+        }
+      }else{
+        res$indel[i]=F
+      }
+    }
+    return(res)
+  }
+
+  sort.id=order(rowMeans(cbind(DATA$FWD.I,DATA$REV.I),na.rm = T))
+  #
+  FWD.index=DATA$FWD.I[sort.id,]
+  REV.index=DATA$REV.I[sort.id,]
+  Q.reads=DATA$Q[sort.id,]
+  #
+  indels=find.indel(FWD.index,REV.index,Q.reads[,3])
+  indel.id=which(indels$indel)
+  if(isempty(indel.id)){
+    return(DATA)
+  }else{
+    FWD.align=DATA$FWD.align[sort.id,]
+    REV.align=DATA$REV.align[sort.id,]
+    FWD.Chm=DATA$FWD.Chm[sort.id,]
+    REV.Chm=DATA$REV.Chm[sort.id,]
+    FWD.Cm=DATA$FWD.Cm[sort.id,]
+    REV.Cm=DATA$REV.Cm[sort.id,]
+    #
+    for(i in length(indel.id):1){
+      if((indels$id[which(indels$indel)])[i]=='FWD'){
+        FWD.align[indel.id[i],which(FWD.align[indel.id[i]+1,]!='x')]=FWD.align[indel.id[i]+1,which(FWD.align[indel.id[i]+1,]!='x')]
+        FWD.index[indel.id[i],which(!is.na(FWD.index[indel.id[i]+1,]))]=FWD.index[indel.id[i]+1,which(!is.na(FWD.index[indel.id[i]+1,]))]
+        FWD.Chm[indel.id[i],which(!is.na(FWD.Chm[indel.id[i]+1,]))]=FWD.Chm[indel.id[i]+1,which(!is.na(FWD.Chm[indel.id[i]+1,]))]
+        FWD.Cm[indel.id[i],which(!is.na(FWD.Cm[indel.id[i]+1,]))]=FWD.Cm[indel.id[i]+1,which(!is.na(FWD.Cm[indel.id[i]+1,]))]
+        Q.reads[indel.id[i],1]=(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)/length(FWD)
+        Q.reads[indel.id[i],2]=sum(FWD.align[indel.id[i],]==FWD)/(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)
+      }
+      if((indels$id[which(indels$indel)])[i]=='REV'){
+        REV.align[indel.id[i],which(REV.align[indel.id[i]+1,]!='x')]=REV.align[indel.id[i]+1,which(REV.align[indel.id[i]+1,]!='x')]
+        REV.index[indel.id[i],which(!is.na(REV.index[indel.id[i]+1,]))]=REV.index[indel.id[i]+1,which(!is.na(REV.index[indel.id[i]+1,]))]
+        REV.Chm[indel.id[i],which(!is.na(REV.Chm[indel.id[i]+1,]))]=REV.Chm[indel.id[i]+1,which(!is.na(REV.Chm[indel.id[i]+1,]))]
+        REV.Cm[indel.id[i],which(!is.na(REV.Cm[indel.id[i]+1,]))]=REV.Cm[indel.id[i]+1,which(!is.na(REV.Cm[indel.id[i]+1,]))]
+        Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REV)
+        Q.reads[indel.id[i],2]=sum(REV.align[indel.id[i],]==REV)/(diff(range(which(REV.align[indel.id[i],]!='x')))+1)
+      }
+    }
+    #
+    FWD.align[(indel.id+1),]='x'
+    REV.align[(indel.id+1),]='x'
+    FWD.Chm[(indel.id+1),]=NA
+    REV.Chm[(indel.id+1),]=NA
+    FWD.Cm[(indel.id+1),]=NA
+    REV.Cm[(indel.id+1),]=NA
+    FWD.index[(indel.id+1),]=NA
+    REV.index[(indel.id+1),]=NA
+    Q.reads[(indel.id+1),]=NA
+    #
+    res=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q.reads),'FWD.I'=FWD.index,'REV.I'=REV.index)
+    return(res)
+  }
+}
+
 # Exact motif search algorithm
 find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
 
@@ -70,7 +154,7 @@ find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
     DATA='blank' # bypasses polymers outside desired length range
   } else {
     if((length(Cm)+length(Chm))!=length(C.key)){
-      show('WARNING! Read MM and ML tag info are different lengths...skipping read!')
+      warning('WARNING! Read MM and ML tag info are different lengths...skipping read!')
       DATA='blank'
     }else{
       polymer=str_split(read,pattern = '')[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
@@ -94,8 +178,8 @@ find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
         #
         quality=cbind('comp'=rep(1,times=length(c(FWD.match,REV.match))),'match'=rep(1,times=length(c(FWD.match,REV.match))),'id'=rep(c('FWD','REV'),times=c(length(FWD.match),length(REV.match))))
         #
-        FWD.I=matrix(c(FWD.match-1,rep(0,times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD))+matrix(c(rep(1:length(FWD),times=length(FWD.match)),rep(0,times=length(FWD.match)*length(FWD))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD),byrow = T)
-        REV.I=matrix(c(rep(0,times=length(FWD.match)),REV.match-1),nrow = length(c(FWD.match,REV.match)),ncol = length(REV))+matrix(c(rep(0,times=length(FWD.match)*length(FWD)),rep(1:length(REV),times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(REV),byrow = T)
+        FWD.I=matrix(c(FWD.match-1,rep(NA,times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD))+matrix(c(rep(1:length(FWD),times=length(FWD.match)),rep(0,times=length(REV.match)*length(FWD))),nrow = length(c(FWD.match,REV.match)),ncol = length(FWD),byrow = T)
+        REV.I=matrix(c(rep(NA,times=length(FWD.match)),REV.match-1),nrow = length(c(FWD.match,REV.match)),ncol = length(REV))+matrix(c(rep(0,times=length(FWD.match)*length(REV)),rep(1:length(REV),times=length(REV.match))),nrow = length(c(FWD.match,REV.match)),ncol = length(REV),byrow = T)
         #
         FWD.Chm=t(matrix(sqrt((FWD=='C')-1),ncol = length(FWD),nrow = length(c(FWD.match,REV.match)),byrow = T))
         REV.Chm=t(matrix(sqrt((REV=='C')-1),ncol = length(REV),nrow = length(c(FWD.match,REV.match)),byrow = T))
@@ -179,7 +263,7 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
     DATA='blank' # bypasses polymers outside desired length range
   } else {
     if((length(Cm)+length(Chm))!=length(C.key)){
-      show('WARNING! Read MM and ML tag info are different lengths...skipping read!')
+      warning('WARNING! Read MM and ML tag info are different lengths...skipping read!')
       DATA='blank'
     }else{
       #
@@ -195,10 +279,10 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
       REV.align=matrix('x',nrow=NN,ncol = length(REV)); colnames(REV.align)<-paste0(REV,'.',1:length(REV))
       FWD.Chm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
       REV.Chm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
-      FWD.Cm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
-      REV.Cm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
-      FWD.I=matrix(0,nrow=NN,ncol = length(FWD))
-      REV.I=matrix(0,nrow=NN,ncol = length(REV))
+      FWD.Cm=FWD.Chm
+      REV.Cm=REV.Chm
+      FWD.I=matrix(NA,nrow=NN,ncol = length(FWD))
+      REV.I=matrix(NA,nrow=NN,ncol = length(REV))
       Q=as.data.frame(matrix(NA,nrow=NN,ncol = 3));colnames(Q) <- c('comp','match','id')
       #
       perf.matches=find.motif(read,Cm,Chm,C.key,read.length,FWD,REV)
@@ -214,8 +298,6 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
         Q[COUNTER,]=perf.matches[['Q']]
         #
         poly.ref[as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]='x'
-        Chm.scores[Chm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
-        Cm.scores[Cm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
         COUNTER=COUNTER+1
       }
       if(perf.matches[['Nfrag']]>1){
@@ -230,8 +312,6 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
         Q[COUNTER:(COUNTER+perf.matches[['Nfrag']]-1),]=perf.matches[['Q']]
         #
         poly.ref[as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]='x'
-        Chm.scores[Chm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
-        Cm.scores[Cm.ids %in% as.numeric(c(perf.matches[['FWD.I']][perf.matches[['FWD.I']]>0],perf.matches[['REV.I']][perf.matches[['REV.I']]>0]))]=NA
         COUNTER=COUNTER+perf.matches[['Nfrag']]
       }
       #
@@ -248,6 +328,8 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
               break
             }
             FWD.align[j,which(edges)]=poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
+            FWD.Chm[j,which(FWD.align[j,]=='C')]=0
+            FWD.Cm[j,which(FWD.align[j,]=='C')]=0
             FWD.Chm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Chm.ids]]=Chm.scores[Chm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
             FWD.Cm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Cm.ids]]=Cm.scores[Cm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
             FWD.I[j,which(edges)]=(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)
@@ -256,8 +338,6 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
             Q[j,2]=mean(poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]==FWD[edges])
             Q[j,3]='FWD'
             #
-            Chm.scores[Chm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]=NA
-            Cm.scores[Cm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]=NA
             poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]='x'
           }
           if(max(align.scores$fwd)<max(align.scores$rev)){
@@ -266,6 +346,8 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
               break
             }
             REV.align[j,which(edges)]=poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]
+            REV.Chm[j,which(REV.align[j,]=='C')]=0
+            REV.Cm[j,which(REV.align[j,]=='C')]=0
             REV.Chm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Chm.ids)]]=Chm.scores[Chm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
             REV.Cm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Cm.ids)]]=Cm.scores[Cm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
             REV.I[j,which(edges)]=(which.max(align.scores$rev)-length(REV)+which(edges)-1)
@@ -274,8 +356,6 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
             Q[j,2]=mean(poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]==REV[edges])
             Q[j,3]='REV'
             #
-            Chm.scores[Chm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]=NA
-            Cm.scores[Cm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]=NA
             poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]='x'
           }
         }
@@ -283,174 +363,11 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
       # save relevant data from read to subset of stable variable
       DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q),'FWD.I'=FWD.I,'REV.I'=REV.I)
-
-    }
-  }
-
-  return(DATA)
-
-}
-
-# Deprecated fragment mapping algorithm
-OLDmap <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
-
-  bounds <- function(data){
-    slideSum <- function(x,n=1){
-      data=c(rep(0,times=n),x,rep(0,times=n))
-      results=rep(NA,times=length(x))
-      for(i in 1:length(x)){
-        results[i]=sum(data[i:(i+2*n)])
-      }
-      return(results)
-    }
-    s1=slideSum(as.integer(data))
-    if(sum(s1>1 & as.numeric(data))==0){
-      return(NULL)
-    }
-    s2=range(which(s1>1 & as.numeric(data)))
-    results=rep(F,times=length(data))
-    results[s2[1]:s2[2]]=T
-    return(results)
-  }
-
-  if((length(Cm)+length(Chm))!=length(C.key) | nchar(read)<min(read.length) | nchar(read)>max(read.length)){
-    DATA='blank' # bypasses polymers outside desired length range
-  } else {
-    test.0=str_extract_all(read,boundary("character"))[[1]] # takes the polymer sequence and converts it from a single string into a vector of 1 base per index
-    test.Chm=rep(NA,times=length(test.0)) # creates temporary  vector to store hydroxy methyl scores for polymer, with NA as default value
-    test.Cm=test.Chm
-    test.Chm[which(test.0=='C')] = 0 # sets the default methylation score for all Cs in the polymer to zero
-    test.Cm[which(test.0=='C')] = 0
-    try(test.Chm[which(test.0=='C')[Chm]]<-C.key[1:length(Chm)]) # writes over methylation scores for annotated Cs in the polymer
-    try(test.Cm[which(test.0=='C')[Cm]]<-C.key[(length(Chm)+1):(length(Chm)+length(Cm))])
-    test.Chm=c(rep(NA,times=length(FWD)),test.Chm,rep(NA,times=length(FWD))) # adds empty flanks to the edges of methyl score vectors, in preparation for sliding alignment
-    test.Cm=c(rep(NA,times=length(FWD)),test.Cm,rep(NA,times=length(FWD)))
-    test.00=c(rep("x",times=length(FWD)),test.0,rep("x",times=length(FWD))) # adds empty flanks to edges of sequence vector, in preparation for sliding alignment
-    refs=rep(0,times=length(test.00))
-    test.1=test.00
-    testy.Chm=test.Chm
-    testy.Cm=test.Cm
-
-    score.FWD=rep(0,times=length(test.1)+1-length(FWD)) # creates temporary vectors to hold the alignment scores for the FWD and REV sequences to the reference polymer
-    score.REV=rep(0,times=length(test.1)+1-length(REV))
-
-    NN=round(length(test.0)/length(FWD)+0.4)+padding # sets the maximum number of fragments allowed to be mapped to the polymer
-    FWD.mat=matrix(FWD,nrow=NN,ncol = length(FWD),byrow = T)
-    REV.mat=matrix(REV,nrow=NN,ncol = length(REV),byrow = T)
-    FWD.align=matrix('x',nrow=NN,ncol = length(FWD)); colnames(FWD.align)<-paste0(FWD,'.',1:length(FWD))
-    REV.align=matrix('x',nrow=NN,ncol = length(REV)); colnames(REV.align)<-paste0(REV,'.',1:length(REV))
-    FWD.Chm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
-    REV.Chm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
-    FWD.Cm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Cm)<-paste0(FWD,'.',1:length(FWD))
-    REV.Cm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Cm)<-paste0(REV,'.',1:length(REV))
-    COUNTER=0
-
-    FWD.refs=matrix(0,nrow=NN,ncol = length(FWD))
-    REV.refs=matrix(0,nrow=NN,ncol = length(REV))
-
-    # loop for sliding reference sequence along read to calculate positional alignment scores
-    for (i in 1:length(score.FWD)){
-
-      score.FWD[i]=mean(FWD==test.1[i:(i+length(FWD)-1)])-mean(FWD!=test.1[i:(i+length(FWD)-1)] & "x"!=test.1[i:(i+length(FWD)-1)])*0.1 # quantifies the alignment quality of FWD reference fragment at various positions along the polymer
-      score.REV[i]=mean(REV==test.1[i:(i+length(REV)-1)])-mean(REV!=test.1[i:(i+length(REV)-1)] & "x"!=test.1[i:(i+length(REV)-1)])*0.1
-      # The following sections prioritize the perfect reference sequence matches in the polymer, recording them as the first mapped fragments
-      if (score.FWD[i]==1){
-        COUNTER=COUNTER+1
-        FWD.align[COUNTER,]=test.1[i:(i+length(FWD)-1)]
-        FWD.Chm[COUNTER,]=test.Chm[i:(i+length(FWD)-1)]
-        FWD.Cm[COUNTER,]=test.Cm[i:(i+length(FWD)-1)]
-        FWD.refs[COUNTER,]=i:(i+length(FWD)-1)
-        test.1[i:(i+length(FWD)-1)]=rep("x",times=length(FWD))
-        test.Chm[i:(i+length(FWD)-1)]=rep(NA,times=length(FWD))
-        test.Cm[i:(i+length(FWD)-1)]=rep(NA,times=length(FWD))
-      }
-      if (score.REV[i]==1){
-        COUNTER=COUNTER+1
-        REV.align[COUNTER,]=test.1[i:(i+length(REV)-1)]
-        REV.Chm[COUNTER,]=test.Chm[i:(i+length(REV)-1)]
-        REV.Cm[COUNTER,]=test.Cm[i:(i+length(REV)-1)]
-        REV.refs[COUNTER,]=i:(i+length(REV)-1)
-        test.1[i:(i+length(REV)-1)]=rep("x",times=length(REV))
-        test.Chm[i:(i+length(REV)-1)]=rep(NA,times=length(REV))
-        test.Cm[i:(i+length(REV)-1)]=rep(NA,times=length(REV))
+      if((fix.indel) & (sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1)){
+        DATA=indel.fix(DATA,FWD,REV)
       }
 
     }
-
-    # loop for performing additional reference alignments with scoring, until sufficient read coverage is achieved
-    for (j in (COUNTER+1):NN){
-
-      # terminates further alignment attempts when less than 10 bases in the polymer remain unmapped
-      if(sum(test.1!="x")<10){
-        break
-      }
-
-      score.FWD=rep(0,times=length(test.1)+1-length(FWD))
-      score.REV=rep(0,times=length(test.1)+1-length(FWD))
-
-      # scoring loop
-      for (i in 1:length(score.FWD)){
-        score.FWD[i]=mean(FWD==test.1[i:(i+length(FWD)-1)])-mean(FWD!=test.1[i:(i+length(FWD)-1)] & "x"!=test.1[i:(i+length(FWD)-1)])*0.1
-        score.REV[i]=mean(REV==test.1[i:(i+length(REV)-1)])-mean(REV!=test.1[i:(i+length(REV)-1)] & "x"!=test.1[i:(i+length(REV)-1)])*0.1
-      }
-
-      # Looks for the best-matching fragment alignments to the polymer, records that section as mapped, then repeats until the polymer is sufficiently mapped
-      FWD.max=which.max(score.FWD)
-      REV.max=which.max(score.REV)
-      if(max(score.FWD)>=max(score.REV)){
-        if(is.null(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))==T){
-          break
-        }
-        FWD.align[j,which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))]=test.1[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]
-        FWD.Chm[j,which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))]=test.Chm[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]
-        FWD.Cm[j,which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))]=test.Cm[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]
-        FWD.refs[j,which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))]=(FWD.max:(FWD.max+length(FWD)-1))[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))]
-        test.Chm[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]=NA
-        test.Cm[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]=NA
-        test.1[which(bounds(test.1[FWD.max:(FWD.max+length(FWD)-1)]==FWD))+FWD.max-1]="x"
-      }
-      if(max(score.FWD)<max(score.REV)){
-        if(is.null(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))==T){
-          break
-        }
-        REV.align[j,which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))]=test.1[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]
-        REV.Chm[j,which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))]=test.Chm[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]
-        REV.Cm[j,which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))]=test.Cm[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]
-        REV.refs[j,which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))]=(REV.max:(REV.max+length(REV)-1))[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))]
-        test.Chm[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]=NA
-        test.Cm[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]=NA
-        test.1[which(bounds(test.1[REV.max:(REV.max+length(REV)-1)]==REV))+REV.max-1]="x"
-      }
-
-    }
-
-    # for each reference sequence mapped to the polymer, get indices of the fragment within the polymer
-    REV.refs[REV.align!=REV.mat & REV.align!="N"]=-1*REV.refs[REV.align!=REV.mat & REV.align!="N"]
-    REV.refs[REV.align=="x"]=0
-    FWD.refs[FWD.align!=FWD.mat & FWD.align!="N"]=-1*FWD.refs[FWD.align!=FWD.mat & FWD.align!="N"]
-    FWD.refs[FWD.align=="x"]=0
-
-    # calculate quality statistics for fragment alignments to read
-    FEF.fwd=1-rowSums(FWD.align=='x')/length(FWD)
-    FEF2.fwd=rowSums(FWD.align==FWD.mat)/rowSums(FWD.align!='x')
-    FEF3.fwd=rowSums(FWD.align=='x')/length(FWD)
-    FEF.rev=1-rowSums(REV.align=='x')/length(REV)
-    FEF2.rev=rowSums(REV.align==REV.mat)/rowSums(REV.align!='x')
-    FEF3.rev=rowSums(REV.align=='x')/length(REV)
-    comp=rep(NA,times=NN)
-    comp[FEF3.fwd!=1]=FEF.fwd[FEF3.fwd!=1]
-    comp[FEF3.rev!=1]=FEF.rev[FEF3.rev!=1]
-    match=rep(NA,times=NN)
-    match[FEF3.fwd!=1]=FEF2.fwd[FEF3.fwd!=1]
-    match[FEF3.rev!=1]=FEF2.rev[FEF3.rev!=1]
-    id=rep(NA,times=NN)
-    id[FEF3.fwd!=1]='FWD'
-    id[FEF3.rev!=1]='REV'
-    quality=cbind(comp,match,id)
-
-    # save relevant data from read to subset of stable variable
-    DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=quality,'FWD.I'=abs(FWD.refs)-length(FWD),'REV.I'=abs(REV.refs)-length(REV))
-
   }
 
   return(DATA)
@@ -802,7 +719,12 @@ pdf.make <- function(data,pars=NULL){
   if(is.null(pars)){
     tmp1=density(data,na.rm = T)
   }else{
-    tmp1=density(data,from = pars[1],to = pars[2],na.rm = T)
+    if(length(pars)==2){
+      tmp1=density(data,from = pars[1],to = pars[2],na.rm = T)
+    }
+    if(length(pars)==3){
+      tmp1=density(data,from = pars[1],to = pars[2],bw = pars[3],na.rm = T)
+    }
   }
   tmp1$y=tmp1$y/sum(mean(diff(tmp1$x))*tmp1$y)
   return(tmp1)
@@ -829,6 +751,7 @@ modk.sum <- function(melo,meca,seqq,thresh,methyl.type){
   return(data.frame('pC'=res,'Nc'=Nc))
 
 }
+
 
 # Save relevant parameters
 PAR.list=ls()
@@ -939,6 +862,8 @@ if(process){
   }
 
   # generate empty matrices to consolidate data
+  FWD.align=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']]));colnames(FWD.align)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
+  REV.align=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']]));colnames(REV.align)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
   FWD.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.Chm)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
   REV.Chm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['REV']])); colnames(REV.Chm)<-paste0(DATA[['REV']],'.',1:length(DATA[['REV']]))
   FWD.Cm=matrix(NA,nrow=DATA[['N']],ncol = length(DATA[['FWD']])); colnames(FWD.Cm)<-paste0(DATA[['FWD']],'.',1:length(DATA[['FWD']]))
@@ -961,6 +886,8 @@ if(process){
     }
     if(!is.null(DATA[[i]][['Nfrag']])){
       if(DATA[[i]][['Nfrag']]==0){
+        FWD.align[COUNTER,]=rep('x',times=length(DATA[['FWD']]))
+        REV.align[COUNTER,]=rep('x',times=length(DATA[['REV']]))
         FWD.index[COUNTER,]=rep(0,times=length(DATA[['FWD']]))
         REV.index[COUNTER,]=rep(0,times=length(DATA[['REV']]))
         Q.reads[COUNTER,4]=i
@@ -969,6 +896,8 @@ if(process){
         COUNTER=COUNTER+1
       }
       if(DATA[[i]][['Nfrag']]==1){
+        FWD.align[COUNTER,]=DATA[[i]][['FWD.align']]
+        REV.align[COUNTER,]=DATA[[i]][['REV.align']]
         FWD.Chm[COUNTER,]=DATA[[i]][['FWD.Chm']]
         REV.Chm[COUNTER,]=DATA[[i]][['REV.Chm']]
         FWD.Cm[COUNTER,]=DATA[[i]][['FWD.Cm']]
@@ -994,6 +923,8 @@ if(process){
         COUNTER=COUNTER+1
       }
       if(DATA[[i]][['Nfrag']]>1){
+        FWD.align[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.align']]
+        REV.align[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.align']]
         FWD.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Chm']]
         REV.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Chm']]
         FWD.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Cm']]
@@ -1020,6 +951,8 @@ if(process){
       }
     }
     if(is.null(DATA[[i]][['Nfrag']])){
+      FWD.align[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.align']]
+      REV.align[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.align']]
       FWD.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Chm']]
       REV.Chm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['REV.Chm']]
       FWD.Cm[COUNTER:(COUNTER+length(DATA[[i]][['Q']][,3])-1),]=DATA[[i]][['FWD.Cm']]
@@ -1046,19 +979,48 @@ if(process){
     }
 
   }
-  FWD.index[FWD.index<0]=NA
-  REV.index[REV.index<0]=NA
   if(pre.ligated){
     remapped.reads$Length[DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length)]=DATA[['RLs']][DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length)]
     remapped.reads$Coverage=mapped.frac
   }
+
+  # prune empty fragment rows
+  junk=which(is.na(Q.reads[,3]))
+  #
+  FWD.index=FWD.index[-junk,]
+  REV.index=REV.index[-junk,]
+  Q.reads=Q.reads[-junk,]
+  FWD.align=FWD.align[-junk,]
+  REV.align=REV.align[-junk,]
+  FWD.Chm=FWD.Chm[-junk,]
+  REV.Chm=REV.Chm[-junk,]
+  FWD.Cm=FWD.Cm[-junk,]
+  REV.Cm=REV.Cm[-junk,]
+
+  # calculate some QC
   FragPos.fwd=pos.score(FWD.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(FWD.index)+1)-1)),length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
   FragPos.rev=pos.score(REV.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(REV.index)+1)-1)),length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
   FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
   FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
+  #
   pMAP=sum(mapped.frac*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac)])
   pMAP2=sum(mapped.frac2*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac2)])
   pMAP0=sum(DATA[['RLs']][DATA[['RLs']]>=read.length[1] & DATA[['RLs']]<=read.length[2]])/sum(DATA[['RLs']])
+  #
+  FWD.mat=matrix(DATA[['FWD']],nrow = nrow(FWD.align),ncol = ncol(FWD.align),byrow = T)
+  REV.mat=matrix(DATA[['REV']],nrow = nrow(REV.align),ncol = ncol(REV.align),byrow = T)
+  FWD.good=colMeans(FWD.align[Q.reads[,3]=='FWD',]==FWD.mat[Q.reads[,3]=='FWD',],na.rm = T)
+  FWD.miss=colMeans(FWD.align[Q.reads[,3]=='FWD',]=='x',na.rm = T)
+  FWD.err=colMeans(FWD.align[Q.reads[,3]=='FWD',]!=FWD.mat[Q.reads[,3]=='FWD',] & FWD.align[Q.reads[,3]=='FWD',] %in% c('A','C','G','T','N'),na.rm = T)
+  REV.good=colMeans(REV.align[Q.reads[,3]=='REV',]==REV.mat[Q.reads[,3]=='REV',],na.rm = T)
+  REV.miss=colMeans(REV.align[Q.reads[,3]=='REV',]=='x',na.rm = T)
+  REV.err=colMeans(REV.align[Q.reads[,3]=='REV',]!=REV.mat[Q.reads[,3]=='REV',] & REV.align[Q.reads[,3]=='REV',] %in% c('A','C','G','T','N'),na.rm = T)
+  rm(FWD.mat,REV.mat)
+  #
+  FRprop=matrix(table(data.frame(Q.reads[,3],as.numeric(Q.reads[,4]))),nrow = 2)
+  FRskew=(FRprop[1,]-FRprop[2,])/colSums(FRprop)
+  FRpropQ=matrix(table(data.frame(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),3],as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))),nrow = 2)
+  FRskewQ=(FRpropQ[1,]-FRpropQ[2,])/colSums(FRpropQ)
 
   if(pre.ligated){
 
@@ -1346,7 +1308,7 @@ if(process){
       text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.8,0.7,0.6),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     }
     text(x=0,y=1.07,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
-    text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5m(h)C'),col='grey',cex=1.3)
+    text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5(h)mC'),col='grey',cex=1.3)
     #
     dev.off()
   }
@@ -1384,13 +1346,52 @@ if(process){
   lines(pdf.make(FragPos.revQ[,f]),col='red')
   #
   dev.off()
+  #
+  if(!(exact.search) & fix.indel){
+    png('QCgraphsC.png', height = round(2650*0.7), width = 2800, res=300)
+    par(mfrow=c(1,1),mar=c(6,3,3,1))
+    #
+    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(DATA[['FWD']])+1),main = paste0(plot_title,'Substrate Sequencing Accuracy'),cex.axis = 1.3,ylab = '',yaxt='n',cex.lab=1.3,cex.main=2,xaxt='n',xlab='')
+    abline(v=FWD.sites+1/2,lty='dotted',col='grey',lwd=2)
+    lines(FWD.good,col='blue',lty='solid',lwd=5)
+    lines(FWD.err,col='blue',lty='solid',lwd=5)
+    lines(FWD.miss,col='blue',lty='solid',lwd=5)
+    lines(rev(REV.good),col='red',lty='solid',lwd=5)
+    lines(rev(REV.err),col='red',lty='solid',lwd=5)
+    lines(rev(REV.miss),col='red',lty='solid',lwd=5)
+    lines(FWD.good,col='green',lty='solid',lwd=1.5)
+    lines(FWD.err,col='black',lty='solid',lwd=1.5)
+    lines(FWD.miss,col='white',lty='solid',lwd=1.5)
+    lines(rev(REV.good),col='green',lty='solid',lwd=1.5)
+    lines(rev(REV.err),col='black',lty='solid',lwd=1.5)
+    lines(rev(REV.miss),col='white',lty='solid',lwd=1.5)
+    legend('topright',legend = c(plot.nom,'Correct','Miscall','Deletion'),col = c('blue','red','green','black','white'),fill=c('blue','red','green','black','white'),bty = 'n',cex=1)
+    axis(side = 2,line = 0,at = c(0,0.25,0.5,3/4,1),labels = c('0%','25%','50%','75%','100%'),tick = T,cex.axis=1.3,col.axis = 'black')
+    axis(side = 1,at = c(0:(length(DATA[['FWD']])+1)),labels = c("5'",DATA[['FWD']],"3'"),cex.axis=0.7,col.axis = 'blue')
+    axis(side = 1,line = 1,at = c(0:(length(DATA[['REV']])+1)),labels = rev(c("5'",DATA[['REV']],"3'")),tick = F,cex.axis=0.7,col.axis = 'red')
+    #
+    dev.off()
+  }
+  #
+  if(T){
+    png('QCgraphsD.png', height = round(2650*0.8), width = 2800, res=300)
+    par(mfrow=c(1,1),mar=c(5,5,3,1))
+    #
+    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(FRskew,pars = c(-1.1,1.1,0.05))$y,pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05))$y))),xlim=c(-1.1,1.1),main = paste0(plot_title,plot.nom[1],' vs ',plot.nom[2],' Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'))
+    lines(pdf.make(FRskew,pars = c(-1.1,1.1,0.05)),col='black',lty='solid',lwd=4)
+    lines(pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05)),col='purple',lty='solid',lwd=4)
+    legend('top',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    #
+    dev.off()
+  }
+  #
   if(pre.ligated){
     png('QCgraphs.png', height = 1325, width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(4,5,3,1))
     #
     FWD.Cm.pdfs=pdf.make(polymer.actual.fwd,pars = c(0,1))
     REV.Cm.pdfs=pdf.make(polymer.actual.rev,pars = c(0,1))
-    plot(NULL,NULL,ylim=c(0,max(c(FWD.Cm.pdfs$y,REV.Cm.pdfs$y))),xlim=c(0,1),main = paste0(plot_title,'Methyl Score Distributions'),cex.axis = 1.6,xlab = 'Methyl Score',cex.lab=2,cex.main=2,ylab='Probability Density')
+    plot(NULL,NULL,ylim=c(0,max(c(FWD.Cm.pdfs$y,REV.Cm.pdfs$y))),xlim=c(0,1),main = paste0(plot_title,'Methyl Score Distributions'),cex.axis = 1.5,xlab = 'Methyl Score',cex.lab=1.5,cex.main=2,ylab='Probability Density')
     abline(v=thresh,lty='dashed',col='grey',lwd=2)
     lines(FWD.Cm.pdfs,col='blue',lwd=2)
     lines(REV.Cm.pdfs,col='red',lwd=2)
