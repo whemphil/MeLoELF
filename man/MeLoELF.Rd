@@ -168,9 +168,11 @@ The third analysis output file, QCgraphsC, contains data on the prevalence of co
 
 The fourth analysis output file, QCgraphsD, contains data on the propensity for FWD and REV fragments to exist heterogeneously versus homogeneously within read polymers.
 
-The fifth analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+The fourth analysis output file, QCgraphsE, contains data on the propensity for low and high methyl-scoring FWD/REV CpG sites to exist heterogeneously versus homogeneously within read polymers.
 
-The sixth analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
+The penultimate analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+
+The final analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
 
 }
 
@@ -195,6 +197,7 @@ Graphs:
 \item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
 \item{QCgraphsC.png}{A plot that shows the frequency of sequencing miscalls and deletions across every base of the substrate sequences.}
 \item{QCgraphsD.png}{A plot of the bias in reads' fragment compositions pre- and post-quality filtering of the fragments.}
+\item{QCgraphsE.png}{A plot of the bias in reads' methylation scores pre- and post-quality filtering of the fragments.}
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }

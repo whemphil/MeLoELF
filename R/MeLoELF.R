@@ -1021,6 +1021,23 @@ if(process){
   FRskew=(FRprop[1,]-FRprop[2,])/colSums(FRprop)
   FRpropQ=matrix(table(data.frame(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),3],as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))),nrow = 2)
   FRskewQ=(FRpropQ[1,]-FRpropQ[2,])/colSums(FRpropQ)
+  #
+  if(methyl.type=='B'){
+    Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)
+    MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+  }
+  if(methyl.type=='M'){
+    Mscore=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)
+    MscoreQ=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+  }
+  if(methyl.type=='H'){
+    Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)
+    MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+  }
+  Mframe=data.frame('S'=Mscore,'N'=as.numeric(Q.reads[,4]))
+  Mskew=aggregate(S ~ N,Mframe,mean)$S
+  MframeQ=data.frame('S'=MscoreQ,'N'=as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))
+  MskewQ=aggregate(S ~ N,MframeQ,mean)$S
 
   if(pre.ligated){
 
@@ -1381,6 +1398,18 @@ if(process){
     lines(pdf.make(FRskew,pars = c(-1.1,1.1,0.05)),col='black',lty='solid',lwd=4)
     lines(pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05)),col='purple',lty='solid',lwd=4)
     legend('top',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    #
+    dev.off()
+  }
+  #
+  if(T){
+    png('QCgraphsE.png', height = round(2650*0.8), width = 2800, res=300)
+    par(mfrow=c(1,1),mar=c(5,5,3,1))
+    #
+    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Average Fragment Sites Methyl Score'))
+    lines(pdf.make(Mskew,pars = c(0,1,0.025)),col='black',lty='solid',lwd=4)
+    lines(pdf.make(MskewQ,pars = c(0,1,0.025)),col='purple',lty='solid',lwd=4)
+    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
     #
     dev.off()
   }
