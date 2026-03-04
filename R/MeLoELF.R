@@ -33,7 +33,6 @@ MeLoELF <- function(parent,
                     padding=2,
                     completeness=0.7,
                     matching=0.9,
-                    fix.indel=T,
                     ins.tol=1,
                     modk.fillC=F,
                     exact.search=F,
@@ -63,7 +62,7 @@ if(nchar(parent)!=nchar(target)){
 
 # WARNINGS
 if(exact.search==T){
-  warning('Motif-based search enabled...the fix.indel, completeness, matching, and padding parameters will be ignored.')
+  warning('Motif-based search enabled...the completeness, matching, and padding parameters will be ignored.')
 }
 if(pre.ligated){
   warning('Fragment re-oligomerization enabled...the completeness and matching parameters will be repurposed.')
@@ -83,6 +82,9 @@ if(Sys.info()['sysname']=='Windows'){
 if(grepl('fastq|fq',sam.file,ignore.case = T)){
   warning('FASTQ file provided...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting (~50k reads/min)...')
   used.fastq=T
+  if(!modk.fillC){
+    stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
+  }
 }else{
   used.fastq=F
 }
@@ -614,7 +616,7 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
       # save relevant data from read to subset of stable variable
       DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q),'FWD.I'=FWD.I,'REV.I'=REV.I)
-      if((fix.indel) & (sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1)){
+      if((sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1)){
         DATA=indel.fix(DATA,FWD,REV)
       }
 
@@ -1054,6 +1056,9 @@ if(crunch.too){
         if(length(sam.file)==1){
           show('FASTQ file detected...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting (~50k reads/min)...')
           used.fastq=T
+          if(!modk.fillC){
+            stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
+          }
         }else{
           show('No single FASTQ file found in working directory...')
           stop('ERROR! No proper input files found -- terminating run.')
@@ -1703,7 +1708,7 @@ if(process){
   #
   dev.off()
   #
-  if(!(exact.search==T) & fix.indel){
+  if(!(exact.search==T)){
     png('FragSeq.png', height = round(2650*0.7), width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(6,3,3,1))
     #
@@ -1745,7 +1750,7 @@ if(process){
     png('MethylReadBias.png', height = round(2650*0.8), width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(5,5,3,1))
     #
-    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Average Fragment Methyl Score'))
+    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Fragment-CpG Methyl Score Average'))
     lines(pdf.make(Mskew,pars = c(0,1,0.025)),col='black',lty='solid',lwd=4)
     lines(pdf.make(MskewQ,pars = c(0,1,0.025)),col='purple',lty='solid',lwd=4)
     legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
@@ -1777,7 +1782,7 @@ if(process){
     x1=DATA[['RLs']][as.numeric(MskewZ$N)]
     x2=DATA[['RLs']][as.numeric(MskewZQ$N)]
     #
-    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Average Fragment Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
+    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Fragment-CpG Methyl Score Average'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
     contour(kde2d(x1,MskewZ$S),col='black',lwd=1.5,add=T)
     contour(kde2d(x2,MskewZQ$S),col='purple',lwd=1,add=T)
     lines(smooth.spline(x1,MskewZ$S,spar = 0.7),col='black',lty='solid',lwd=4)

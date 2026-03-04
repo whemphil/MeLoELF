@@ -23,7 +23,6 @@ MeLoELF(parent,
         padding=2,
         completeness=0.7,
         matching=0.9,
-        fix.indel=T,
         ins.tol=1,
         modk.fillC=F,
         exact.search=F,
@@ -63,7 +62,6 @@ Defaults:
 \item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
 \item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.7.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
-\item{fix.indel}{A logical indicating whether fragments with indels, which are initially mapped as separate fragments, should be stitched back into a single fragment right after mapping; DEFAULT -- T.}
 \item{ins.tol}{An integer giving the maximum number of base insertions at a site to tolerate when re-stitching fragments during fix.indel=T procedures; DEFAULT -- 1.}
 \item{modk.fillC}{A logical indicating whether, both during methyl score assignment and during Modkit summary-like statistic calculations in MethylScoring output, non-indexed Cs in read sequences should be filled with zero methyl score values instead of only using ML:B:C values in the parent SAM file (see Details for suggestions); DEFAULT -- F.}
 \item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search. Alternatively, an integer that specifies the kmer size for a balanced kmer-mapping algorithm (see Details before changing default); DEFAULT -- F.}
@@ -85,8 +83,6 @@ Defaults:
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
 
 {T1.err, T2.err} -- {The type-I and type-II error rates controls are only as valid as the assumption that Dorado ML:B:C modification scores fall into two different distributions, with mostly precision-based dispersion in a single site's scoring. However, our own experiments with synthetic control fragments suggest that Dorado scoring makes more qualitative errors at some rate, where individual methylated CpG sites score with a bimodal negative/positive distribution. This introduces an intrinsic, qualitative type-II error rate which cannot be controlled for by the BM thresholding.}
-
-{fix.indel} -- {Can repair large deletions, but will only fix insertions up to the size set by ins.tol parameter. Parameter is ignored if crunch.too=F or exact.search=T, and if FALSE, the FragSeq plot wil not be exported.}
 
 {modk.fillC} -- {In the example pipeline provided on this help page, the parameter is unecessary, since Dorado's scoring behavior skips non-CpG sites entirely, making NA the more appropriate value for non-indexed Cs. However, this parameter is useful for other Dorado settings where methyl scores are calculated at all Cs, but may be intentionally skipped in MM:Z indexing if the score is sufficiently low.}
 
