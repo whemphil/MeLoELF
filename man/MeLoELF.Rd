@@ -206,6 +206,7 @@ Graphs:
 \item{MethylReadBias.png}{A plot of the bias in reads' methylation scores pre- and post-quality filtering of the fragments.}
 \item{FRbiasLengthCorr.png}{A correlation plot of the bias in reads' FWD:REV fragment composition as a function of read length, pre- and post-fragment quality filtering.}
 \item{5mCbiasLengthCorr.png}{A correlation plot of the bias in reads' methylation scores as a function of read length, pre- and post-fragment quality filtering.}
+\item{5mCReadPosCorr.png}{A correlation plot of the FWD and REV fragments' individual CpG site methylation scores as a function of their distance from the 5' end of the read, pre- and post-quality filtering.}
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }

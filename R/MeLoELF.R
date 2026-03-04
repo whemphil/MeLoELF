@@ -1784,6 +1784,75 @@ if(process){
     dev.off()
   }
   #
+  if(T){
+    png('5mCReadPosCorr.png', height = round(2650*1.4), width = 2800, res=300)
+    par(mfrow=c(2,1),mar=c(5,5,3,1))
+    #
+    x1=c(FWD.index[,FWD.sites])
+    if(methyl.type=='B'){
+      y1=c((FWD.Chm+FWD.Cm)[,FWD.sites])
+    }
+    if(methyl.type=='M'){
+      y1=c(FWD.Cm[,FWD.sites])
+    }
+    if(methyl.type=='H'){
+      y1=c(FWD.Chm[,FWD.sites])
+    }
+    #
+    x2=c(FWD.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+    if(methyl.type=='B'){
+      y2=c((FWD.Chm+FWD.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+    }
+    if(methyl.type=='M'){
+      y2=c(FWD.Cm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+    }
+    if(methyl.type=='H'){
+      y2=c(FWD.Chm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+    }
+    d1=na.omit(data.frame('x'=x1,'y'=y1))
+    d2=na.omit(data.frame('x'=x2,'y'=y2))
+    #
+    plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[1]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
+    contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
+    contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
+    lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
+    lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
+    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    #
+    #
+    x1=c(REV.index[,REV.sites])
+    if(methyl.type=='B'){
+      y1=c((REV.Chm+REV.Cm)[,REV.sites])
+    }
+    if(methyl.type=='M'){
+      y1=c(REV.Cm[,REV.sites])
+    }
+    if(methyl.type=='H'){
+      y1=c(REV.Chm[,REV.sites])
+    }
+    #
+    x2=c(REV.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+    if(methyl.type=='B'){
+      y2=c((REV.Chm+REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+    }
+    if(methyl.type=='M'){
+      y2=c((REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+    }
+    if(methyl.type=='H'){
+      y2=c((REV.Chm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+    }
+    d1=na.omit(data.frame('x'=x1,'y'=y1))
+    d2=na.omit(data.frame('x'=x2,'y'=y2))
+    #
+    plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[2]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
+    contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
+    contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
+    lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
+    lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
+    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    dev.off()
+  }
+  #
   if(pre.ligated){
     png('MethylScoring.png', height = 1325, width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(4,5,3,1))
