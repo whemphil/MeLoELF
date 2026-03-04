@@ -39,16 +39,16 @@ MeLoELF(parent,
 
 Required:
 
-\item{parent}{A single character string indicating the substrate's FWD/parent strand sequence (5'->3'); DEFAULT -- none.}
-\item{target}{A single character string indicating the substrate's REV/target strand sequence (5'->3'); DEFAULT -- none.}
-\item{FWD.sites}{A numeric vector indicating indices for CpG methylation sites in the parent strand; DEFAULT -- none.}
-\item{REV.sites}{A numeric vector indicating indices for CpG methylation sites in the target strand; DEFAULT -- none.}
+\item{parent}{A single character string indicating the substrate's FWD/parent strand sequence (5'->3').}
+\item{target}{A single character string indicating the substrate's REV/target strand sequence (5'->3').}
+\item{FWD.sites}{A numeric vector indicating indices for CpG methylation sites in the parent strand (5'->3').}
+\item{REV.sites}{A numeric vector indicating indices for CpG methylation sites in the target strand (5'->3').}
 
 Defaults:
 
 \item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
-\item{sam.file}{A single character string indicating the filename for the input sam file containing the Nanopore sequencing data; DEFAULT -- searches mdir directory for sam file.}
-\item{sam.indices}{A numeric vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of sam file header lines to skip; DEFAULT -- c(10,33,34,0)}
+\item{sam.file}{A single character string indicating the filename for the input data -- NULL for pre-processed TXT files (see Details), a FASTQ-extension file for traditional Illumina bisulfite sequencing, and a SAM file for Nanopore modified base sequencing; DEFAULT -- 'auto' (see Details).}
+\item{sam.indices}{A numeric vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of SAM file header lines to skip; DEFAULT -- c(10,33,34,0)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity (see Details before using); DEFAULT -- FALSE.}
@@ -64,31 +64,33 @@ Defaults:
 \item{completeness}{A numeric value indicating the minimum length of mapped fragments relative to the reference sequence for them to be used in analysis -- 0-1; DEFAULT -- 0.7.}
 \item{matching}{A numeric value indicating the minimum proportion of matching basecalls for a mapped fragment to be used in analysis -- 0-1; DEFAULT -- 0.9.}
 \item{fix.indel}{A logical indicating whether fragments with indels, which are initially mapped as separate fragments, should be stitched back into a single fragment right after mapping; DEFAULT -- T.}
-\item{ins.tol}{An integer giving the maximum number of base insertions to tolerate when re-stitching fragments during fix.indel=T procedures; DEFAULT -- 1.}
-\item{modk.fillC}{A logical indicating whether, during Modkit-like methylation statistic calculations in QCgraphs output, un-indexed Cs in read sequences should be filled with zero methyl score values instead of only using ML:B:C values in the parent SAM file; DEFAULT -- F.}
-\item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search (see Details before using); DEFAULT -- F.}
+\item{ins.tol}{An integer giving the maximum number of base insertions at a site to tolerate when re-stitching fragments during fix.indel=T procedures; DEFAULT -- 1.}
+\item{modk.fillC}{A logical indicating whether, both during methyl score assignment and during Modkit summary-like statistic calculations in MethylScoring output, non-indexed Cs in read sequences should be filled with zero methyl score values instead of only using ML:B:C values in the parent SAM file (see Details for suggestions); DEFAULT -- F.}
+\item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search. Alternatively, an integer that specifies the kmer size for a balanced kmer-mapping algorithm (see Details before changing default); DEFAULT -- F.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}
-\item{seq.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read sequences; DEFAULT -- 'sequences.txt'.}
-\item{melo.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read CpG indices; DEFAULT -- 'methlocations.txt'.}
-\item{meca.file}{A single character string indicating the filename for the exported txt file containing the Nanopore read methyl and hydroxy-methyl scores; DEFAULT -- 'methcalls.txt'.}
+\item{seq.file}{A single character string indicating the filename for the exported TXT file containing the Nanopore read sequences; DEFAULT -- 'sequences.txt'.}
+\item{melo.file}{A single character string indicating the filename for the exported TXT file containing the Nanopore read CpG indices; DEFAULT -- 'methlocations.txt'.}
+\item{meca.file}{A single character string indicating the filename for the exported TXT file containing the Nanopore read methyl and hydroxy-methyl scores; DEFAULT -- 'methcalls.txt'.}
 \item{plot_title}{A single character string indicating a common ID to append to the titles of outputted analysis graphs; DEFAULT -- none.}
 \item{plot.nom}{A character string vector of length 2 indicating the naming convention to use for the FWD/parent and REV/target strands, respectively, in outputted analysis graphs; DEFAULT -- c('FWD','REV').}
 }
 
 \details{
 
-{sam.file} -- {If sam.file is set to NULL, or if no sam file is found by auto-search, then the working directory will be searched to directly load seq.file, melo.file, and meca.file.}
+{sam.file} -- {If set to 'auto' (default), the mdir directory will be searched for TXT files with the seq.file, melo.file, and meca.file names, then for a single SAM file of any name, then for a single FASTQ file of any name, before finally returning an error if these options fail. If set to NULL, then the working directory will be searched to directly load TXT files. If a filename containing the FASTQ extension, the file will be alternatively processed into files resembling the SAM file output for downstream compatibility. If any other character string, it will be handled as though a SAM filename. When analyzing FASTQ-derived bisulfite sequencing data, it's recommended to manually set thresh.meth=0.5 for speed and accuracy.}
 
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
 
-{fix.indel} -- {Can repair large deletions, but will only fix insertions if they are a single base. Parameter is ignored if crunch.too=F or exact.search=T, and if fix.indel=F, the QCgraphsC plot wil not be exported.}
+{fix.indel} -- {Can repair large deletions, but will only fix insertions up to the size set by ins.tol parameter. Parameter is ignored if crunch.too=F or exact.search=T, and if FALSE, the FragSeq plot wil not be exported.}
 
-{exact.search} -- {This parameter alters the mapping algorithm to a simple motif search, which drastically shortens fragment extraction time by only scanning each read for exact matches to the FWD/parent and REV/target sequences. The format of almost all data structures and output are conserved, with the exception of fragment quality filtering-related metrics. Relatedly, unless used in conjunction with pre.ligated=T, using this setting deprecates the completeness and matching parameters.}
+{modk.fillC} -- {In the example pipeline provided on this help page, the parameter is unecessary, since Dorado's scoring behavior skips non-CpG sites entirely, making NA the more appropriate value for non-indexed Cs. However, this parameter is useful for other Dorado settings where methyl scores are calculated at all Cs, but may be intentionally skipped in MM:Z indexing if the score is sufficiently low.}
 
-{pre.ligated} -- {This parameter is intended for niche applications with enzymes acting on hemi-methylated substrate. If pre.ligated=T, mapped fragments are computationally reconstructed into their original read polymers, sorted into FWD and REV homopolymers, filtered according to their read mapping and coverage quality, then collapsed into vectors of only their indexed CpG sites for analysis. This option ignores the var.thresh parameter entirely, and it repurposes the completeness and matching parameters during polymer filtering for read coverage and mapped section basematch accuracy metrics, respectively. In addition, only the methylation_survival plot and a rudimentary version of the QCgraphs plot are exported.}
+{exact.search} -- {This parameter alters the mapping algorithm. If TRUE, to a simple motif search, which drastically shortens fragment extraction time by only scanning each read for exact matches to the FWD/parent and REV/target sequences. The format of almost all data structures and output are conserved, with the exception of fragment quality filtering-related metrics. Relatedly, unless used in conjunction with pre.ligated=T, using this setting deprecates the completeness and matching parameters. If an integer, kmer-based mapping is employed as a middle ground for speed and accuracy, with the integer specifying the size of the kmers to be used. A kmer size of 10-15 percent the substrate length is strongly recommended in this case.}
+
+{pre.ligated} -- {This parameter is intended for niche applications with enzymes acting on hemi-methylated substrate. If TRUE, mapped fragments are computationally reconstructed into their original read polymers, sorted into FWD and REV homopolymers, filtered according to their read mapping and coverage quality, then collapsed into vectors of only their indexed CpG sites for analysis. This option ignores the var.thresh parameter entirely, and it repurposes the completeness and matching parameters during polymer filtering for read coverage and mapped section basematch accuracy metrics, respectively. In addition, only the methylation_survival plot and a rudimentary version of the QCgraphs plot are exported.}
 
 ---------
 ---------
@@ -122,13 +124,13 @@ STEP 4:	MeLoELF Analysis
 
 GitHub Repository:	www.github.com/whemphil/MeLoELF
 
-MeLoELF is an R package for parsing the sequence, 5mC/5hmC score, and 5mC/5hmC location data provided within Dorado-basecalled SAM files, and analyzing the methylation states of the individual substrate molecules that compose the sequenced polymers.
+MeLoELF is an R package for parsing the sequence, 5mC/5hmC score, and 5mC/5hmC location data provided within Dorado-basecalled SAM files, or within Illumina-based bisulfite sequencing FASTQ files, and analyzing the methylation states of the individual substrate molecules that compose the sequenced polymers.
 MeLoELF was coded in R v4.5.2 on MacOS, with Unix machines in mind. Function parameters and data structures were designed for optimal analysis of enzymes acting on hemimethylated substrates, like DNMT1, but are generally applicable for de novo methylases as well.
 MeLoELF analysis can be divided into five general phases.
 
 Phase 1:  SAM File Parsing
 
-The SAM file (identified by the mdir and sam.file parameters) is parsed with “awk” via system/bash invocation to extract the data columns corresponding to read sequences, MM:Z methyl locations/indices, and ML:B:C 5mC/5mhC scores (identified by the sam.indices parameter). For each read, the sequence information is converted to a character vector, and methyl and hydroxy-methyl score vectors of equal lengths are prepared. Default scores are set to zero for “C” basecalls and NA otherwise, then base indices implicated by the MM:Z values are updated with the corresponding ML:B:C scores. Finally, the ML:B:C scores, which are reported on a 0-256 integer scale in SAM files, are normalized to a 0-1 scale.
+The SAM file (identified by the mdir and sam.file parameters) is parsed with “awk” via system/bash invocation to extract the data columns corresponding to read sequences, MM:Z methyl locations/indices, and ML:B:C 5mC/5mhC scores (identified by the sam.indices parameter). For each read, the sequence information is converted to a character vector, and methyl and hydroxy-methyl score vectors of equal lengths are prepared. Default scores are set to zero for “C” basecalls and NA otherwise, then base indices implicated by the MM:Z values are updated with the corresponding ML:B:C scores. Finally, the ML:B:C scores, which are reported on a 0-256 integer scale in SAM files, are normalized to a 0-1 scale. For FASTQ files, the base sequence is used to generate mock modified C SAM-like data structures, complete with versions of the MM:Z and ML:B:C values,  export them to TXT files as though from SAM file output, then be treated identically thereafter.
 
 These three aligned vectors for each read are used in phase 2.
 
@@ -164,19 +166,19 @@ In the case of a manual thresholding override, the methyl scores of all sites an
 
 Phase 5:  Methylation State Analyses
 
-The first analysis output file, QCgraphs, contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), FWD and REV fragments passing quality filtering (“Qual.”), the total coverage of mapped reads before and after fragment quality filtering ("Map"), and the percentage of methylation in all Cs across all reads, just mapped reads, and just unmapped reads ("5(h)mC").
+MethylScoring contains the plots “Methyl Score Distributions” and “Methyl Location Distributions”. The former provides violin plots of the normalized ML:B:C scores (set by methyl.type parameter) at each CpG sites along the aligned fragments, as well as counts of the of scored bases mapped to each site. Data are from only fragments that passed quality filtering. The latter plot provides bar graphs of fractions of FWD and REV fragments with methylation at each CpG site (according to selected thresholding), as well as the fraction of fragments with those CpG sites as their most 5’ or 3’ methylations. In addition, there are exact values for the percent of FWD and REV CpG sites methylated (“CpG”), FWD and REV fragments methylated (“Sub.”), FWD and REV fragments passing quality filtering (“Qual.”), the total coverage of mapped reads before and after fragment quality filtering ("Map"), and the percentage of methylation in all Cs across all reads, just mapped reads, and just unmapped reads ("5(h)mC").
 
-The second analysis output file, QCgraphsB, contains distribution plots of mapped fragment positions (that pass quality filtering). The metrics for fragment position are “Relative to Read”, which plots location of the fragment’s center relative to its parent read length, “From Nearest Edge”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from its parent read’s closest 5’ or 3’ end, “From 5’/3’ End”, which plot the same metric but from a specific parent read end, and “From Read Center”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from the center of its parent read. Probability density functions are provided for both the combined and separate FWD and REV fragment positional data.
+FragPos contains distribution plots of mapped fragment positions (that pass quality filtering). The metrics for fragment position are “Relative to Read”, which plots location of the fragment’s center relative to its parent read length, “From Nearest Edge”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from its parent read’s closest 5’ or 3’ end, “From 5’/3’ End”, which plot the same metric but from a specific parent read end, and “From Read Center”, which plots how many multiples of the reference sequence length the mapped fragment’s center is from the center of its parent read. Probability density functions are provided for both the combined and separate FWD and REV fragment positional data.
 
-The third analysis output file, QCgraphsC, contains data on the prevalence of correct basecalls, incorrect basecalls, and deletions across both substrate sequences.
+FragSeq contains data on the prevalence of correct basecalls, incorrect basecalls, and deletions across both substrate sequences.
 
-The fourth analysis output file, QCgraphsD, contains data on the propensity for FWD and REV fragments to exist heterogeneously versus homogeneously within read polymers.
+FwdRevReadBias contains data on the propensity for FWD and REV fragments to exist heterogeneously versus homogeneously within read polymers.
 
-The fourth analysis output file, QCgraphsE, contains data on the propensity for low and high methyl-scoring FWD/REV CpG sites to exist heterogeneously versus homogeneously within read polymers.
+MethylReadBias contains data on the propensity for low and high methyl-scoring FWD/REV CpG sites to exist heterogeneously versus homogeneously within read polymers.
 
-The penultimate analysis output file, methylation_survival, provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
+MethylationSurvival provides survival plots across methylated fragment data for a metric of enzyme processivity. In brief, the 5’-most methylation on each methylated fragment is identified, then the number of consecutive methylations 3’ of the site divided by the number of CpG sites 3’ of the site to give a survival score. Survival scores are subsetted by FWD and REV fragments, and survival curves of those scores integrated to give the AUC metric. The “Sim. Dist.” plot corresponds to a randomization of the binarized REV fragment data frame subjected to the same analysis, meant to provide a baseline for the AUC of a distributive reaction with similar overall methylation levels.
 
-The final analysis output file, methyl_distribution, provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
+MethylDistribution provides histograms of the number of methylated CpG sites across FWD and REV fragments. The “Sim. Dist.” corresponds to the same control as above.
 
 }
 
@@ -184,9 +186,9 @@ The final analysis output file, methyl_distribution, provides histograms of the 
 
 Files:
 
-\item{sequences.txt}{A txt file containing the Nanopore read sequences parsed from the input sam file.}
-\item{methlocations.txt}{A txt file containing the Nanopore read C-methylation indices parsed from the input sam file.}
-\item{methcalls.txt}{A txt file containing the Nanopore read C-methyl scores parsed from the input sam file.}
+\item{sequences.txt}{A TXT file containing the read sequences parsed from the input sam file.}
+\item{methlocations.txt}{A TXT file containing the Nanopore-formatted MM:Z methylation indices parsed from the input sam file.}
+\item{methcalls.txt}{A TXT file containing the Nanopore-formatted ML:B:C methylation scores parsed from the input sam file.}
 \item{align.RData}{A compressed R data file containing all relevant variables created as part of the pre-analysis fragment mapping and methylation score assignment.}
 \item{processed.RData}{A compressed R data file containing the processed matrices of FWD and REV mapped fragments' methyl scores that passed quality filtering.}
 \item{methylation_matrices.RDS}{A compressed R data file containing the selected threshold value for methyl score binarization, and containing the data frames with survival data for the FWD, REV, and simulated control fragments.}
@@ -195,13 +197,15 @@ Files:
 
 Graphs:
 
-\item{methylation_survival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
-\item{methyl_distribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
-\item{QCgraphs.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent substrate molecule methylation, percent of mapped fragments passing quality control filtering, percent coverage of mapped reads before and after fragment quality filtering, and Modkit Summary-like statistics on percent methylation across all sequenced Cs in all reads, just mapped reads, and just unmapped reads.}
-\item{QCgraphsB.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
-\item{QCgraphsC.png}{A plot that shows the frequency of sequencing miscalls and deletions across every base of the substrate sequences.}
-\item{QCgraphsD.png}{A plot of the bias in reads' fragment compositions pre- and post-quality filtering of the fragments.}
-\item{QCgraphsE.png}{A plot of the bias in reads' methylation scores pre- and post-quality filtering of the fragments.}
+\item{MethylationSurvival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
+\item{MethylDistribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
+\item{MethylScoring.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent substrate molecule methylation, percent of mapped fragments passing quality control filtering, percent coverage of mapped reads before and after fragment quality filtering, and Modkit Summary-like statistics on percent methylation across all sequenced Cs in all reads, just mapped reads, and just unmapped reads.}
+\item{FragPos.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
+\item{FragSeq.png}{A plot that shows the frequency of sequencing miscalls and deletions across every base of the substrate sequences.}
+\item{FwdRevReadBias.png}{A plot of the bias in reads' fragment compositions pre- and post-quality filtering of the fragments.}
+\item{MethylReadBias.png}{A plot of the bias in reads' methylation scores pre- and post-quality filtering of the fragments.}
+\item{FRbiasLengthCorr.png}{A correlation plot of the bias in reads' FWD:REV fragment composition as a function of read length, pre- and post-fragment quality filtering.}
+\item{5mCbiasLengthCorr.png}{A correlation plot of the bias in reads' methylation scores as a function of read length, pre- and post-fragment quality filtering.}
 \item{R Graphical Output}{If the BM thresholding method is used, a plot comparing the probability densities of the observed methyl score data and the fitted mixed beta distribution is produced. If var.thresh>0, then multiple plots will be outputted; first for all the combined scores of strands indicate by BM.strand.data, then for each CpG site starting from the 5' end of the fwd/parent strand and alternating between the rev/target and fwd/parent strands if var.thresh=2.}
 
 }
