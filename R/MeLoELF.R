@@ -268,7 +268,7 @@ find.motif <- function(read,Cm,Chm,C.key,read.length,FWD,REV){
 }
 
 # Kmer mapping algorithm
-map.kmers <- function(read,Cm,Chm,C.key,read.length,FWD,REV,fwdK,revK,Fkey,Rkey,Kn=exact.search) {
+map.kmers <- function(read,Cm,Chm,C.key,read.length,FWD,REV,fwdK,revK,Fkey,Rkey) {
   
   k.merge <- function(data){
     
@@ -341,7 +341,7 @@ map.kmers <- function(read,Cm,Chm,C.key,read.length,FWD,REV,fwdK,revK,Fkey,Rkey,
           Froots = 1
         }else{
           Frun <- rbind(ImapF$start,Fkey[ImapF$match])[,order(ImapF$start)]
-          Fbreak = which(diff((Frun[1,]))>=(length(FWD)-5) | diff((Frun[2,]))<0)
+          Fbreak = which(diff((Frun[1,]))>=(length(FWD)) | diff((Frun[2,]))<0)
           Findel = which(diff(Frun[1,])!=diff(Frun[2,]) & abs(diff(Frun[1,])-diff(Frun[2,]))<3)
           Findel = Findel[!(Findel %in% Fbreak)]
           Froots = sort(unique(c(Findel,Fbreak,ncol(Frun))))
@@ -357,7 +357,7 @@ map.kmers <- function(read,Cm,Chm,C.key,read.length,FWD,REV,fwdK,revK,Fkey,Rkey,
           Rroots = 1
         }else{
           Rrun <- rbind(ImapR$start,Rkey[ImapR$match])[,order(ImapR$start)]
-          Rbreak = which(diff(Rrun[1,])>=(length(REV)-5) | diff(Rrun[2,])<0)
+          Rbreak = which(diff(Rrun[1,])>=(length(REV)) | diff(Rrun[2,])<0)
           Rindel = which(diff(Rrun[1,])!=diff(Rrun[2,]) & abs(diff(Rrun[1,])-diff(Rrun[2,]))<3)
           Rindel = Rindel[!(Rindel %in% Rbreak)]
           Rroots = sort(unique(c(Rindel,Rbreak,ncol(Rrun))))
@@ -576,8 +576,8 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
             }
             FWD.align[j,which(edges)]=poly.ref[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
             if(modk.fillC){
-              FWD.Chm[j,which(FWD.align[j,]=='C')]=0
-              FWD.Cm[j,which(FWD.align[j,]=='C')]=0
+              FWD.Chm[j,which(FWD.align[j,]=='C')]=0; FWD.Chm[j,which(!edges)]=NA
+              FWD.Cm[j,which(FWD.align[j,]=='C')]=0; FWD.Cm[j,which(!edges)]=NA
             }
             FWD.Chm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Chm.ids]]=Chm.scores[Chm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
             FWD.Cm[j,which(edges)[(which.max(align.scores$fwd)-length(FWD)+which(edges)-1) %in% Cm.ids]]=Cm.scores[Cm.ids %in% (which.max(align.scores$fwd)-length(FWD)+which(edges)-1)]
@@ -596,8 +596,8 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
             }
             REV.align[j,which(edges)]=poly.ref[(which.max(align.scores$rev)-length(REV)+which(edges)-1)]
             if(modk.fillC){
-              REV.Chm[j,which(REV.align[j,]=='C')]=0
-              REV.Cm[j,which(REV.align[j,]=='C')]=0
+              REV.Chm[j,which(REV.align[j,]=='C')]=0; REV.Chm[j,which(!edges)]=NA
+              REV.Cm[j,which(REV.align[j,]=='C')]=0; REV.Cm[j,which(!edges)]=NA
             }
             REV.Chm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Chm.ids)]]=Chm.scores[Chm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
             REV.Cm[j,which(edges)[((which.max(align.scores$rev)-length(REV)+which(edges)-1) %in% Cm.ids)]]=Cm.scores[Cm.ids %in% (which.max(align.scores$rev)-length(REV)+which(edges)-1)]
@@ -1137,6 +1137,9 @@ if(crunch.too){
       #
       fwd.k=fwd.kset[fwd.kID]
       rev.k=rev.kset[rev.kID]
+      if(length(fwd.k)<1 | length(rev.k)<1){
+        stop("ERROR! MeLoELF was unable to find at least one unique k-mer each for the FWD/parent and REV/target reference sequences. Try a different k-mer size, or shift to motif search or whole-fragment alignment.")
+      }
       keyF <- setNames(fwd.kID,fwd.k)
       keyR <- setNames(rev.kID,rev.k)
       
@@ -1754,7 +1757,7 @@ if(process){
     png('FRbiasLengthCorr.png', height = round(2650*0.8), width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(5,5,3,1))
     #
-    x1=DATA[['RLs']][DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<= max(read.length)]
+    x1=DATA[['RLs']][unique(na.omit(as.numeric(Q.reads[,4])))]
     x2=DATA[['RLs']][as.numeric(unique(Q.reads[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))]
     #
     plot(NULL,NULL,ylim=c(-1,1),xlim=c(0,max(x1)),main = paste0(plot_title,plot.nom[1],':',plot.nom[2],' Polymer Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
