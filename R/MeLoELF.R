@@ -1742,7 +1742,7 @@ if(process){
     png('MethylReadBias.png', height = round(2650*0.8), width = 2800, res=300)
     par(mfrow=c(1,1),mar=c(5,5,3,1))
     #
-    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Average Fragment Site Methyl Score'))
+    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Average Fragment Methyl Score'))
     lines(pdf.make(Mskew,pars = c(0,1,0.025)),col='black',lty='solid',lwd=4)
     lines(pdf.make(MskewQ,pars = c(0,1,0.025)),col='purple',lty='solid',lwd=4)
     legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
@@ -1774,7 +1774,7 @@ if(process){
     x1=DATA[['RLs']][as.numeric(MskewZ$N)]
     x2=DATA[['RLs']][as.numeric(MskewZQ$N)]
     #
-    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Average Fragment Site Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
+    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Average Fragment Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
     contour(kde2d(x1,MskewZ$S),col='black',lwd=1.5,add=T)
     contour(kde2d(x2,MskewZQ$S),col='purple',lwd=1,add=T)
     lines(smooth.spline(x1,MskewZ$S,spar = 0.7),col='black',lty='solid',lwd=4)
