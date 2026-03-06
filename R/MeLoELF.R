@@ -1340,8 +1340,8 @@ if(process){
   REV.Cm=REV.Cm[-junk,]
 
   # calculate some QC
-  FragPos.fwd=pos.score(FWD.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(FWD.index)+1)-1)),length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
-  FragPos.rev=pos.score(REV.index,rep(DATA[['RLs']][which(1:length(DATA[['RLs']]) %in% as.numeric(names(table(as.numeric(Q.reads[,4])))))],times=diff(c(match(unique(na.omit(as.numeric(Q.reads[,4])))[order(unique(na.omit(as.numeric(Q.reads[,4]))))],as.numeric(Q.reads[,4])),nrow(REV.index)+1)-1)),length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
+  FragPos.fwd=pos.score(FWD.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
+  FragPos.rev=pos.score(REV.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
   FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
   FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
   #
