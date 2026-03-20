@@ -8,7 +8,7 @@ MeLoELF(parent,
         REV.sites,
         mdir=getwd(),
         sam.file='auto',
-        sam.indices=c(10,33,34,0),
+        sam.indices=c(10,'auto','auto',0),
         crunch.too=T,
         process=T,
         pre.ligated=F,
@@ -47,7 +47,7 @@ Defaults:
 
 \item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
 \item{sam.file}{A single character string indicating the filename for the input data -- NULL for pre-processed TXT files (see Details), a FASTQ-extension file for traditional Illumina bisulfite sequencing, and a SAM file for Nanopore modified base sequencing; DEFAULT -- 'auto' (see Details).}
-\item{sam.indices}{A numeric vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of SAM file header lines to skip; DEFAULT -- c(10,33,34,0)}
+\item{sam.indices}{A mixed numeric/string vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of SAM file header lines to skip; DEFAULT -- c(10,'auto','auto',0)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity (see Details before using); DEFAULT -- FALSE.}
@@ -77,6 +77,8 @@ Defaults:
 \details{
 
 {sam.file} -- {If set to 'auto' (default), the mdir directory will be searched for TXT files with the seq.file, melo.file, and meca.file names, then for a single SAM file of any name, then for a single FASTQ file of any name, before finally returning an error if these options fail. If set to NULL, then the working directory will be searched to directly load TXT files. If a filename containing the FASTQ extension, the file will be alternatively processed into files resembling the SAM file output for downstream compatibility. If any other character string, it will be handled as though a SAM filename. When analyzing FASTQ-derived bisulfite sequencing data, it's recommended to manually set thresh.meth=0.5 for speed and accuracy.}
+
+{sam.indices} -- {The second (MM:Z, methyl locations) and third (ML:B, methyl scores) vector indices can be set to 'auto' (default), which will search for the field at each line of the SAM file that contains the relevant tag.}
 
 {thresh.meth} -- {The BM option fits the collective methyl scores across FWD and REV strands to a mixed beta distribution, then sets the threshold based on a 0.95 (by default) quantile in the low/unmethylated distribution. The AUC option scales the threshold based on what produces an FWD/parent strand AUC~0.9 (by default) in the survival analysis; it is only suited for hemimethylated substrate reactions, where the FWD strand is available as a positive control with known methylation status.}
 
