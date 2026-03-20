@@ -18,7 +18,7 @@ MeLoELF <- function(parent,
                     REV.sites,
                     mdir=getwd(),
                     sam.file='auto',
-                    sam.indices=c(10,33,34,0),
+                    sam.indices=c(10,'auto','auto',0),
                     crunch.too=T,
                     process=T,
                     pre.ligated=F,
@@ -77,14 +77,11 @@ if(length(FWD.sites) != length(REV.sites)){
   warning('WARNING:  The FWD/parent and REV/target strands have different numbers of methylation sites...some analyses may be affected adversely.')
 }
 if(Sys.info()['sysname']=='Windows'){
-  warning('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs. The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls txt files must be supplied manually to the mdir directory.')
+  warning('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs. The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls TXT files must be supplied manually to the mdir directory.')
 }
 if(grepl('fastq|fq',sam.file,ignore.case = T)){
   warning('FASTQ file provided...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting (~50k reads/min)...')
   used.fastq=T
-  if(!modk.fillC){
-    stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
-  }
 }else{
   used.fastq=F
 }
@@ -1079,13 +1076,24 @@ if(crunch.too){
     fwrite(x = as.list(ONTsim$melo),file = melo.file,sep = '\n',col.names = F,quote = F)
     fwrite(x = as.list(ONTsim$meca),file = meca.file,sep = '\n',col.names = F,quote = F)
     show('...file adaptation complete!')
+    if(!modk.fillC){
+      stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
+    }
   }
   
   # process relevant sam file information into individual txt files for loading
   if(!is.null(sam.file) & !used.fastq){
     try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
-    try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
-    try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+    if(sam.indices[2]=='auto'){
+      try(system(paste0("awk 'NR > ",sam.indices[4]," {for (i=1;i<=NF;i++){if ($i ~/MM:Z/) {print $i}}}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
+    }else{
+      try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[2],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
+    }
+    if(sam.indices[3]=='auto'){
+      try(system(paste0("awk 'NR > ",sam.indices[4]," {for (i=1;i<=NF;i++){if ($i ~/ML:B/) {print $i}}}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+    }else{
+      try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[3],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",meca.file)))
+    }
   }
 
   # time stamp for beginning of alignment job
