@@ -2072,7 +2072,11 @@ if(process){
       text(x = 1,y = 90,pos=4,labels=paste0('Proc. = ',round(100*reg.rev[['proc']]),'% (',round(100*median(reg.rev[['procS']])),'% ± ',round(100*sd(reg.rev[['procS']])),'%)'),cex=1.3,col='red')
       text(x = 1,y = 80,pos=4,labels=paste0('5mC noise = ',round(100*reg.rev[['type1err']]),'% (',round(100*median(reg.rev[['type1errS']])),'% ± ',round(100*sd(reg.rev[['type1errS']])),'%)'),cex=1.3,col='red')
     }else{
-      text(x = 1,y = 95,pos=4,labels='* Indistinguishable from noise',cex=1.3,col='red')
+      if(fMs.rev >= 0.15 + T1.err){
+        text(x = 1,y = 95,pos=4,labels='* Distributive/Noise-like distribution',cex=1.3,col='red')
+      }else{
+        text(x = 1,y = 95,pos=4,labels='* Indistinguishable from noise',cex=1.3,col='red')
+      }
       text(x = 1,y = 85,pos=4,labels=paste0('Proc. = n/a (',round(100*reg.rev[['procM']]),'% ± ',round(100*sd(reg.rev[['procS']])),'%)'),cex=1.3,col='red')
       text(x = 1,y = 75,pos=4,labels=paste0('5mC noise = n/a (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*sd(reg.rev[['type1errS']])),'%)'),cex=1.3,col='red')
     }
