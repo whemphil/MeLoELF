@@ -18,6 +18,7 @@ MeLoELF(parent,
         var.thresh=0,
         T1.err=0.01,
         T2.err=0.05,
+        proc.mdl='wiggle',
         target_fwd_auc=0.9,
         read.length=NULL,
         padding=2,
@@ -47,7 +48,7 @@ Defaults:
 
 \item{mdir}{A single character string indicating the working directory for files; DEFAULT -- working directory.}
 \item{sam.file}{A single character string indicating the filename for the input data -- NULL for pre-processed TXT files (see Details), a FASTQ-extension file for traditional Illumina bisulfite sequencing, and a SAM file for Nanopore modified base sequencing; DEFAULT -- 'auto' (see Details).}
-\item{sam.indices}{A mixed numeric/string vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of SAM file header lines to skip; DEFAULT -- c(10,'auto','auto',0)}
+\item{sam.indices}{An integer vector of length four indicating the SAM file's column numbers for sequences, methyl locations, and methyl scores, respectively, as well as the number of SAM file header lines to skip; DEFAULT -- c(10,'auto','auto',0)}
 \item{crunch.too}{A logical indicating whether alignment data should be generated instead of loaded; DEFAULT -- TRUE.}
 \item{process}{A logical indicating whether alignment data should be processed and analyzed; DEFAULT -- TRUE.}
 \item{pre.ligated}{A logical indicating whether the substrate was ligated before enzyme activity (see Details before using); DEFAULT -- FALSE.}
@@ -57,6 +58,7 @@ Defaults:
 \item{var.thresh}{A numeric value indicating whether CpG sites should be thresholded individually (ignored unless pre.ligated=F and thresh.meth='BM') -- 0 = no individual site thresholding, 1 = individual thresholding for rev/target strand sites only, 2 = individual thresholding for all sites; DEFAULT -- 0.}
 \item{T1.err}{A numeric value indicating what type-I error rate should be targeted during mixed beta thresholding if thresh.meth='BM' -- 0-1; DEFAULT -- 0.01.}
 \item{T2.err}{A numeric value indicating what type-II error rate should be targeted during mixed beta thresholding if type-I error rate cannot be estimated and if thresh.meth='BM' -- 0-1; DEFAULT -- 0.05.}
+\item{proc.mdl}{A string indicating what model should be used to simulate and regress the enzyme's processivity data -- c('wiggle','directed'); DEFAULT -- 0.05.}
 \item{target_fwd_auc}{A numeric value indicating the percentile confidence score cutoff below which methylation data is ignored if thresh.meth='AUC' -- 0-1; DEFAULT -- 0.9.}
 \item{read.length}{A numeric vector of length 2 indicating minimum then maximum read length to process (>3000 base reads are likely to be data processing artifacts & <10 are likely to have little alignment accuracy) -- 0-Inf; DEFAULT -- scales lower bound to half the REV/target sequence length, and upper bound to the 98th percentile of SAM file read lengths.}
 \item{padding}{A numeric value indicating the number of additional fragments per read to attempt extracting -- 0-Inf; DEFAULT -- 2.}
@@ -85,6 +87,8 @@ Defaults:
 {var.thresh} -- {If var.thresh=1, the FWD/parent strand will be thresholded based on the composite distribution of CpG sites implicated by BM.strand.data.}
 
 {T1.err, T2.err} -- {The type-I and type-II error rates controls are only as valid as the assumption that Dorado ML:B:C modification scores fall into two different distributions, with mostly precision-based dispersion in a single site's scoring. However, our own experiments with synthetic control fragments suggest that Dorado scoring makes more qualitative errors at some rate, where individual methylated CpG sites score with a bimodal negative/positive distribution. This introduces an intrinsic, qualitative type-II error rate which cannot be controlled for by the BM thresholding.}
+
+{proc.mdl} -- {If 'wiggle', enzyme is assumed to bind at a random initial site, then methylate freely in both directions until a set number (determined by its processivity) of consecutive sites are encountered. If 'directed', enzyme is assumed to bind an initial random site, then methylate freely in a single direction until a set number of sites (determined by its processivity) are encountered or the end of the substrate is reached.}
 
 {modk.fillC} -- {In the example pipeline provided on this help page, the parameter is unecessary, since Dorado's scoring behavior skips non-CpG sites entirely, making NA the more appropriate value for non-indexed Cs. However, this parameter is useful for other Dorado settings where methyl scores are calculated at all Cs, but may be intentionally skipped in MM:Z indexing if the score is sufficiently low.}
 
@@ -197,8 +201,8 @@ Files:
 
 Graphs:
 
-\item{MethylationSurvival.png}{Survival plots for the FWD, REV, and simulated control methylation state data.}
-\item{MethylDistribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, and simulated control data sets.}
+\item{MethylationSurvival.png}{Survival plots for the FWD, REV, regressed REV processivity, and simulated control methylation state data.}
+\item{MethylDistribution.png}{Grouped histograms of the numbers of methyl marks on each mapped fragment of the FWD, REV, regressed REV processivity, and simulated control data sets.}
 \item{MethylScoring.png}{A collection of plots with quality control information about the methylation properties of FWD and REV mapped fragments. Includes violin plots of methyl score distributions for each methylation site relative to the selected threshold, histograms of fraction methylation at individual CpG sites and of initial REV site methylation assuming directional processivity, and calculations of percent CpG site methylation, percent substrate molecule methylation, percent of mapped fragments passing quality control filtering, percent coverage of mapped reads before and after fragment quality filtering, and Modkit Summary-like statistics on percent methylation across all sequenced Cs in all reads, just mapped reads, and just unmapped reads.}
 \item{FragPos.png}{A collection of plots with quality control information about the mapping biases of FWD and REV fragments. Includes probability density distributions for several metrics of mapped fragment positions on their parent reads.}
 \item{FragSeq.png}{A plot that shows the frequency of sequencing miscalls and deletions across every base of the substrate sequences.}

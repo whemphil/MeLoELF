@@ -28,6 +28,7 @@ MeLoELF <- function(parent,
                     var.thresh=0,
                     T1.err=0.01,
                     T2.err=0.05,
+                    proc.mdl='wiggle',
                     target_fwd_auc=0.9,
                     read.length=NULL,
                     padding=2,
@@ -946,11 +947,11 @@ row_sum_counts <- function(mat) {
   if (!is.matrix(mat) && !is.data.frame(mat)) {
     stop("Input must be a matrix or data frame.")
   }
-  rs <- rowSums(mat)
+  rs <- rowSums(mat,na.rm = T)
   total_rows <- length(rs)
   df <- data.frame(
-    sum = 0:max(rs),
-    count = sapply(0:max(rs), function(k) sum(rs == k))
+    sum = 0:ncol(mat),
+    count = sapply(0:ncol(mat), function(k) sum(rs == k))
   )
   df$percentage <- df$count / total_rows * 100
   return(df)
@@ -1024,6 +1025,131 @@ fastq.adapter <- function(read){
   eM.Z=diff(c(0,which(as.numeric(gregexpr('C|U',read)[[1]]) %in% as.numeric(gregexpr('U',read)[[1]]))))-1
   res=data.frame('read'=gsub('U','C',read),'melo'=paste0('EM:Z:C+h?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';C+m?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';',collapse = ''),'meca'=paste0('EL:B:C',paste0(rep(c(',',0),each=length(eM.Z)),collapse = ''),paste0(rep(c(',',256),each=length(eM.Z)),collapse = ''),collapse = ''))
   return(res)
+}
+
+# Calculate processivity parameters from binarized matrix
+get.proc2 <- function(dat,mdl=proc.mdl){
+  
+  sim.dist2 <- function(par,site.meth2=site.meth,n.dist2=n.dist,sim.n=1e4,otpt=1,type=mdl){
+    
+    if(type=='wiggle'){
+      if(otpt==1){
+        k=length(n.dist2)-1
+        m.counts=rep(0,times=sim.n)
+        target.meth=round(sim.n*k*(site.meth2-par[2])/(1-par[2]))
+        if(target.meth>0){
+          for(iter in 1:sim.n*2){
+            i=sample(which(m.counts<k),1)
+            m.counts[i]=pmin(sample(1:k,size = 1,prob = c((par[1]^(c(1:k)[-k] - 1))*(1-par[1]),par[1]^(k-1)))+m.counts[i],k)
+            meth.stat=sum(m.counts)-target.meth
+            if(meth.stat>=0){
+              m.counts[i]=m.counts[i]-meth.stat
+              break
+            }
+          }
+        }
+        errs=table(sample(rep(1:sim.n,times=k-m.counts),size = round(sim.n*k*site.meth2)-target.meth))
+        m.counts[as.numeric(names(errs))]=m.counts[as.numeric(names(errs))]+errs
+        t.counts=table(m.counts)
+        data.dist=rep(0,times=k+1)
+        data.dist[as.numeric(names(t.counts))+1]=t.counts/sim.n
+        #
+        return(sum((1+abs(data.dist-n.dist2))^2))
+      }
+      if(otpt==2){
+        k=length(n.dist2)-1
+        m.counts=matrix(0,nrow=sim.n,ncol=k)
+        target.meth=round(sim.n*k*(site.meth2-par[2])/(1-par[2]))
+        if(target.meth>0){
+          for(iter in 1:sim.n*2){
+            i=sample(which(rowSums(m.counts)<k),1)
+            m.num=pmin(sample(1:k,size = 1,prob = c((par[1]^(c(1:k)[-k] - 1))*(1-par[1]),par[1]^(k-1))),k-rowSums(m.counts)[i])
+            m.start=sample(1:(sum(m.counts[i,]==0)-m.num+1),1)
+            m.adds=which(m.counts[i,]==0)[(m.start):(m.start+m.num-1)]
+            m.counts[i,m.adds]=1
+            meth.stat=sum(m.counts)-target.meth
+            if(meth.stat>=0){
+              m.counts[i,m.adds]=0
+              m.num=m.num-meth.stat
+              m.start=sample(1:(sum(m.counts[i,]==0)-m.num+1),1)
+              m.adds=which(m.counts[i,]==0)[(m.start):(m.start+m.num-1)]
+              m.counts[i,m.adds]=1
+              break
+            }
+          }
+        }
+        m.counts[sample(which(m.counts==0),size = round(sim.n*k*site.meth2)-target.meth)]=1
+        #
+        return(m.counts)
+      }
+    }
+    if(type=='directed'){
+      k=length(n.dist2)-1
+      m.counts=matrix(0,nrow=sim.n,ncol=k)
+      target.meth=round(sim.n*k*(site.meth2-par[2])/(1-par[2]))
+      if(target.meth>0){
+        for(iter in 1:sim.n*2){
+          i=sample(which(rowSums(m.counts)<k),1)
+          m.start=sample(which(m.counts[i,]==0),1)
+          m.num=pmin(sample(1:k,size = 1,prob = c((par[1]^(c(1:k)[-k] - 1))*(1-par[1]),par[1]^(k-1))),sum(which(m.counts[i,]==0)>=m.start))
+          m.adds=which(m.counts[i,]==0 & 1:k >= m.start)[1:m.num]
+          m.counts[i,m.adds]=1
+          meth.stat=sum(m.counts)-target.meth
+          if(meth.stat>=0){
+            m.counts[i,m.adds]=0
+            m.num=m.num-meth.stat
+            m.adds=which(m.counts[i,]==0 & 1:k >= m.start)[1:m.num]
+            m.counts[i,m.adds]=1
+            break
+          }
+        }
+      }
+      m.counts[sample(which(m.counts==0),size = round(sim.n*k*site.meth2)-target.meth)]=1
+      #
+      if(otpt==2){
+        return(m.counts)
+      }
+      if(otpt==1){
+        m.counts.tab=table(rowSums(m.counts))
+        data.dist=rep(0,times=k+1)
+        data.dist[as.numeric(names(m.counts.tab))+1]=m.counts.tab/sim.n
+        return(sum((1+abs(data.dist-n.dist2))^2))
+      }
+    }
+    
+  }
+  
+  site.meth=sum(dat,na.rm = T)/sum(!is.na(dat))
+  frag.meth=sum(rowSums(dat,na.rm = T)>0)/nrow(dat)
+  n.dist=rep(0,times=ncol(dat)+1)
+  n.dist[as.numeric(names(table(rowSums(dat,na.rm = T))))+1]=table(rowSums(dat,na.rm = T))/nrow(dat)
+  #
+  k=ncol(dat)
+  tmp.1=(n.dist[k+1]/(1-n.dist[1]))^(1/(k-1))
+  tmp.2=sum((0.5*n.dist[2])^(1:k))
+  #
+  fit1=optim(par = c(proc.prob=tmp.1,type1err=tmp.2),fn = sim.dist2,lower = c(0,0),upper = c(1,site.meth),method = "L-BFGS-B")
+  fit2=optim(par = c(proc.prob=tmp.1,type1err=tmp.2),fn = sim.dist2,lower = c(0,0),upper = c(1,site.meth),method = "L-BFGS-B")
+  fit3=optim(par = c(proc.prob=tmp.1,type1err=tmp.2),fn = sim.dist2,lower = c(0,0),upper = c(1,site.meth),method = "L-BFGS-B")
+  fitCTRLres=sim.dist2(par = c(proc.prob=0,type1err=site.meth),otpt = 1)  #
+  winner=which.min(c(fit1$value,fit2$value,fit3$value))
+  if(winner==1){
+    fit=fit1
+  }
+  if(winner==2){
+    fit=fit2
+  }
+  if(winner==3){
+    fit=fit3
+  }
+  advantage=(sqrt(fitCTRLres/(k+1))-sqrt(fit$value/(k+1)))*100
+  sim.dat=sim.dist2(par = fit$par,sim.n = nrow(dat),otpt = 2)
+  if(advantage<=5){
+    return(list('proc'=NA,'type1err'=site.meth,'sim'=sim.dat,'procSD'=1*sd(c(fit1$par[1],fit2$par[1],fit3$par[1])),'type1errSD'=1*sd(c(fit1$par[2],fit2$par[2],fit3$par[2])),'procM'=fit$par[1],'type1errM'=fit$par[2]))
+  }else{
+    return(list('proc'=fit$par[1],'type1err'=fit$par[2],'sim'=sim.dat,'procSD'=1*sd(c(fit1$par[1],fit2$par[1],fit3$par[1])),'type1errSD'=1*sd(c(fit1$par[2],fit2$par[2],fit3$par[2])),'procM'=fit$par[1],'type1errM'=fit$par[2]))
+  }
+  
 }
 
 # Save relevant parameters
@@ -1540,31 +1666,38 @@ if(process){
   }
   ctrl.binary=rev.binary; ctrl.binary[!is.na(ctrl.binary)]=0
   ctrl.binary[sample(which(!is.na(rev.binary)),sum(rev.binary==1,na.rm = T))]=1
-
+  reg.rev=get.proc2(rev.binary)
+  reg.rev.binary=reg.rev[['sim']]
+  
   fwd.binary.surv <- get_survival_data(fwd.binary)
   rev.binary.surv <- get_survival_data(rev.binary[,ncol(rev.binary):1])
   ctrl.binary.surv <- get_survival_data(ctrl.binary[,ncol(ctrl.binary):1])
-
+  reg.rev.binary.surv <- get_survival_data(reg.rev.binary[,ncol(reg.rev.binary):1])
+  
   fwd.surv.plot <- empirical_survival(fwd.binary.surv$duration)
   rev.surv.plot <- empirical_survival(rev.binary.surv$duration)
   ctrl.surv.plot <- empirical_survival(ctrl.binary.surv$duration)
-
+  reg.rev.surv.plot <- empirical_survival(reg.rev.binary.surv$duration)
+  
   fwd.frac.full <- fraction_full(fwd.binary.surv)
   rev.frac.full <- fraction_full(rev.binary.surv)
   ctrl.frac.full <- fraction_full(ctrl.binary.surv)
-  frac.full <- c(fwd.frac.full, rev.frac.full, ctrl.frac.full)
+  reg.rev.frac.full <- fraction_full(reg.rev.binary.surv)
+  frac.full <- c(fwd.frac.full, rev.frac.full, ctrl.frac.full, reg.rev.frac.full)
 
   fwd.auc <- compute_auc(fwd.surv.plot)
   rev.auc <- compute_auc(rev.surv.plot)
   ctrl.auc <- compute_auc(ctrl.surv.plot)
-  auc <- c(fwd.auc, rev.auc, ctrl.auc)
+  reg.rev.auc <- compute_auc(reg.rev.surv.plot)
+  auc <- c(fwd.auc, rev.auc, ctrl.auc, reg.rev.auc)
 
   fwd.median.dur <- median_duration(fwd.surv.plot)
   rev.median.dur <- median_duration(rev.surv.plot)
   ctrl.median.dur <- median_duration(ctrl.surv.plot)
-  median <- c(fwd.median.dur, rev.median.dur, ctrl.median.dur)
+  reg.rev.median.dur <- median_duration(reg.rev.surv.plot)
+  median <- c(fwd.median.dur, rev.median.dur, ctrl.median.dur, reg.rev.median.dur)
 
-  matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv, CTRL = ctrl.binary.surv)
+  matrices <- list(FWD = fwd.binary.surv, REV = rev.binary.surv, CTRL = ctrl.binary.surv, REGrev = reg.rev.binary.surv)
   summary<- data.frame(strand = names(matrices), frac.full, auc, median)
 
   save(matrices, file="methylation_matrices.RDS")
@@ -1894,8 +2027,9 @@ if(process){
        main=paste0(plot_title, "Methylation Survival"), cex.main = 2, cex.axis=2, cex.lab = 2)
   lines(fwd.surv.plot$x, fwd.surv.plot$y, type="s", col="blue", lwd=2)
   lines(rev.surv.plot$x, rev.surv.plot$y, type="s", col="magenta1", lwd=2)
+  lines(reg.rev.surv.plot$x, reg.rev.surv.plot$y, type="s", col="red", lwd=2)
   lines(ctrl.surv.plot$x, ctrl.surv.plot$y, type="s", col="grey", lwd=2)
-  legend('topright', legend = c(paste0(plot.nom[1],' (AUC=',round(fwd.auc, digits=2),')'), paste0(plot.nom[2],' (AUC=',round(rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','grey'),fill = c('blue','magenta1','grey'),cex=1.2, bty="n")
+  legend('topright', legend = c(paste0(plot.nom[1],' (AUC=',round(fwd.auc, digits=2),')'), paste0(plot.nom[2],' (AUC=',round(rev.auc, digits=2),')'), paste0('Reg. Dist. (AUC=',round(reg.rev.auc, digits=2),')'), paste0('Sim. Dist. (AUC=',round(ctrl.auc, digits=2),')')),col = c('blue','magenta1','red','grey'),fill = c('blue','magenta1','red','grey'),cex=1.2, bty="n")
   dev.off()
 
   write.csv(rev.binary, "revbinary.csv")
@@ -1904,33 +2038,45 @@ if(process){
     # Distribution analysis
     fwd_vals <- (colSums(fwd.binary) / nrow(fwd.binary))*100
     rev_vals <- (colSums(rev.binary) / nrow(rev.binary))*100
+    reg.rev_vals <- (colSums(reg.rev.binary) / nrow(reg.rev.binary))*100
     ctrl_vals <- (colSums(ctrl.binary) / nrow(ctrl.binary))*100
     n_positions <- length(fwd_vals)
 
-    fwd.binary.counts <- row_sum_counts(na.omit(fwd.binary))
-    rev.binary.counts <- row_sum_counts(na.omit(rev.binary))
-    ctrl.binary.counts <- row_sum_counts(na.omit(ctrl.binary))
+    fwd.binary.counts <- row_sum_counts(fwd.binary)
+    rev.binary.counts <- row_sum_counts(rev.binary)
+    reg.rev.binary.counts <- row_sum_counts(reg.rev.binary)
+    ctrl.binary.counts <- row_sum_counts(ctrl.binary)
 
-    valsmat <- rbind(fwd_vals, rev_vals,ctrl_vals)
+    valsmat <- rbind(fwd_vals, rev_vals,reg.rev_vals,ctrl_vals)
     valsmat_sub <- valsmat[, -1, drop=FALSE]
 
     new_labels <- 1:(ncol(valsmat) - 1)
 
-    fwd_vals <- fwd.binary.counts[-1, 3]
-    rev_vals <- rev.binary.counts[-1, 3]
-    ctrl_vals <- ctrl.binary.counts[-1, 3]
-    x_labels <- fwd.binary.counts[-1, 1]
+    fwd_vals <- fwd.binary.counts[, 3]
+    rev_vals <- rev.binary.counts[, 3]
+    reg.rev_vals <- reg.rev.binary.counts[, 3]
+    ctrl_vals <- ctrl.binary.counts[, 3]
+    x_labels <- fwd.binary.counts[, 1]
 
     png(paste0(wd, "/MethylDistribution.png"), height = 1320, width = 2800, res=300)
     par(mfrow=c(1,1), mar=c(5,6,3,8), xpd=TRUE)
 
 
     suppressWarnings(
-    barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(3, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2,cex.axis = 2,ylab = 'Percent of Reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste0(plot_title, "Methylation Distribution")))
-    barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(3, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
-    barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(3, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
-    axis(1, at = seq(0, (length(fwd_vals) - 1) * 4 + 1, by = 4)+1.5, labels = x_labels, cex.axis = 2)
-    legend('topright',inset = c(-0.2, 0.1),legend = c(plot.nom,'Sim. Dist.'),col = c('blue', 'magenta1','grey'),fill = c('blue', 'magenta1','grey'),cex = 1.2,bty = "n")
+    barplot(fwd_vals,ylim = c(0, 100),width = 1,space = c(0, rep(4, times = length(fwd_vals) - 1)),col = 'blue',cex.main = 2,cex.axis = 2,ylab = 'Percent of Reads',xlab = 'Number of 5mCs',cex.lab = 2,main = paste0(plot_title, "Methylation Distribution")))
+    barplot(rev_vals, ylim = c(0, 100),width = 1,space = c(1.1, rep(4, times = length(rev_vals) - 1)),col = 'magenta1',add = TRUE,yaxt = 'n')
+    barplot(reg.rev_vals, ylim = c(0, 100),width = 1,space = c(2.2, rep(4, times = length(reg.rev_vals) - 1)),col = 'red',add = TRUE,yaxt = 'n')
+    barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(3.3, rep(4, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
+    axis(1, at = seq(0, (length(fwd_vals) - 1) * 5 + 1, by = 5)+2.15, labels = x_labels, cex.axis = 2)
+    if(!is.na(reg.rev[['proc']])){
+      text(x = 1,y = 90,pos=4,labels=paste0('Proc. = ',round(100*reg.rev[['proc']]),'% (',round(100*reg.rev[['procM']]),'% ± ',round(100*reg.rev[['procSD']]),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 80,pos=4,labels=paste0('5mC noise = ',round(100*reg.rev[['type1err']]),'% (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*reg.rev[['type1errSD']]),'%)'),cex=1.3,col='red')
+    }else{
+      text(x = 1,y = 95,pos=4,labels='* Indistinguishable from noise',cex=1.3,col='red')
+      text(x = 1,y = 85,pos=4,labels=paste0('Proc. = n/a (',round(100*reg.rev[['procM']]),'% ± ',round(100*reg.rev[['procSD']]),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 75,pos=4,labels=paste0('5mC noise = n/a (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*reg.rev[['type1errSD']]),'%)'),cex=1.3,col='red')
+    }
+    legend('topright',inset = c(-0.2, 0.1),legend = c(plot.nom,'Reg. Dist.','Sim. Dist.'),col = c('blue', 'magenta1','red','grey'),fill = c('blue', 'magenta1','red','grey'),cex = 1.2,bty = "n")
 
     dev.off()
 
