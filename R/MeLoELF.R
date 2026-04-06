@@ -1145,9 +1145,9 @@ get.proc2 <- function(dat,mdl=proc.mdl){
   advantage=(sqrt(fitCTRLres/(k+1))-sqrt(fit$value/(k+1)))*100
   sim.dat=sim.dist2(par = fit$par,sim.n = nrow(dat),otpt = 2)
   if(advantage<=5){
-    return(list('proc'=NA,'type1err'=site.meth,'sim'=sim.dat,'procSD'=1*sd(c(fit1$par[1],fit2$par[1],fit3$par[1])),'type1errSD'=1*sd(c(fit1$par[2],fit2$par[2],fit3$par[2])),'procM'=fit$par[1],'type1errM'=fit$par[2]))
+    return(list('proc'=NA,'type1err'=site.meth,'sim'=sim.dat,'procS'=c(fit1$par[1],fit2$par[1],fit3$par[1]),'type1errS'=c(fit1$par[2],fit2$par[2],fit3$par[2]),'procM'=fit$par[1],'type1errM'=fit$par[2]))
   }else{
-    return(list('proc'=fit$par[1],'type1err'=fit$par[2],'sim'=sim.dat,'procSD'=1*sd(c(fit1$par[1],fit2$par[1],fit3$par[1])),'type1errSD'=1*sd(c(fit1$par[2],fit2$par[2],fit3$par[2])),'procM'=fit$par[1],'type1errM'=fit$par[2]))
+    return(list('proc'=fit$par[1],'type1err'=fit$par[2],'sim'=sim.dat,'procS'=c(fit1$par[1],fit2$par[1],fit3$par[1]),'type1errS'=c(fit1$par[2],fit2$par[2],fit3$par[2]),'procM'=fit$par[1],'type1errM'=fit$par[2]))
   }
   
 }
@@ -2069,12 +2069,12 @@ if(process){
     barplot(ctrl_vals, ylim = c(0, 100),width = 1,space = c(3.3, rep(4, times = length(ctrl_vals) - 1)),col = 'grey',add = TRUE,yaxt = 'n')
     axis(1, at = seq(0, (length(fwd_vals) - 1) * 5 + 1, by = 5)+2.15, labels = x_labels, cex.axis = 2)
     if(!is.na(reg.rev[['proc']])){
-      text(x = 1,y = 90,pos=4,labels=paste0('Proc. = ',round(100*reg.rev[['proc']]),'% (',round(100*reg.rev[['procM']]),'% ± ',round(100*reg.rev[['procSD']]),'%)'),cex=1.3,col='red')
-      text(x = 1,y = 80,pos=4,labels=paste0('5mC noise = ',round(100*reg.rev[['type1err']]),'% (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*reg.rev[['type1errSD']]),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 90,pos=4,labels=paste0('Proc. = ',round(100*reg.rev[['proc']]),'% (',round(100*median(reg.rev[['procS']])),'% ± ',round(100*sd(reg.rev[['procS']])),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 80,pos=4,labels=paste0('5mC noise = ',round(100*reg.rev[['type1err']]),'% (',round(100*median(reg.rev[['type1errS']])),'% ± ',round(100*sd(reg.rev[['type1errS']])),'%)'),cex=1.3,col='red')
     }else{
       text(x = 1,y = 95,pos=4,labels='* Indistinguishable from noise',cex=1.3,col='red')
-      text(x = 1,y = 85,pos=4,labels=paste0('Proc. = n/a (',round(100*reg.rev[['procM']]),'% ± ',round(100*reg.rev[['procSD']]),'%)'),cex=1.3,col='red')
-      text(x = 1,y = 75,pos=4,labels=paste0('5mC noise = n/a (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*reg.rev[['type1errSD']]),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 85,pos=4,labels=paste0('Proc. = n/a (',round(100*reg.rev[['procM']]),'% ± ',round(100*sd(reg.rev[['procS']])),'%)'),cex=1.3,col='red')
+      text(x = 1,y = 75,pos=4,labels=paste0('5mC noise = n/a (',round(100*reg.rev[['type1errM']]),'% ± ',round(100*sd(reg.rev[['type1errS']])),'%)'),cex=1.3,col='red')
     }
     legend('topright',inset = c(-0.2, 0.1),legend = c(plot.nom,'Reg. Dist.','Sim. Dist.'),col = c('blue', 'magenta1','red','grey'),fill = c('blue', 'magenta1','red','grey'),cex = 1.2,bty = "n")
 
