@@ -1022,7 +1022,7 @@ modk.sum <- function(melo,meca,seqq,thresh,methyl.type,fill.Cs){
 
 # Adapter for converting bisulfite sequencing FASTQ files into MeLoELF-compatible input txt files
 fastq.adapter <- function(read){
-  eM.Z=diff(c(0,which(as.numeric(gregexpr('C|U',read)[[1]]) %in% as.numeric(gregexpr('U',read)[[1]]))))-1
+  eM.Z=diff(c(0,which(as.numeric(gregexpr('C|U',read)[[1]]) %in% as.numeric(gregexpr('C',read)[[1]]))))-1
   res=data.frame('read'=gsub('U','C',read),'melo'=paste0('EM:Z:C+h?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';C+m?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';',collapse = ''),'meca'=paste0('EL:B:C',paste0(rep(c(',',0),each=length(eM.Z)),collapse = ''),paste0(rep(c(',',256),each=length(eM.Z)),collapse = ''),collapse = ''))
   return(res)
 }
