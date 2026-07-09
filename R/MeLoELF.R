@@ -63,28 +63,30 @@ if(nchar(parent)!=nchar(target)){
 
 # WARNINGS
 if(exact.search==T){
-  warning('Motif-based search enabled...the completeness, matching, and padding parameters will be ignored.')
+  show('Motif-based search enabled...the completeness, matching, and padding parameters will be ignored.')
 }
 if(pre.ligated){
-  warning('Fragment re-oligomerization enabled...the completeness and matching parameters will be repurposed.')
+  show('Fragment re-oligomerization enabled...the completeness and matching parameters will be repurposed.')
 }
 if(!is.null(read.length) & !(exact.search==T)){
-  warning('WARNING:  Mapping long reads without the motif search algorithm drastically increases computational time.')
+  show('WARNING:  Mapping long reads without the motif search algorithm drastically increases computational time.')
 }
 if(var.thresh==2){
-  warning('Per-site thresholding enabled...the BM.strand.data parameter will be ignored.')
+  show('Per-site thresholding enabled...the BM.strand.data parameter will be ignored.')
 }
 if(length(FWD.sites) != length(REV.sites)){
-  warning('WARNING:  The FWD/parent and REV/target strands have different numbers of methylation sites...some analyses may be affected adversely.')
+  show('WARNING:  The FWD/parent and REV/target strands have different numbers of methylation sites...some analyses may be affected adversely.')
 }
 if(Sys.info()['sysname']=='Windows'){
-  warning('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs. The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls TXT files must be supplied manually to the mdir directory.')
+  show('WARNING! -- The MeLoELF package was designed with Unix systems in mind, and may not work on Windows PCs. The sam -> txt file processing invokes bash/awk functionality, so at minimum, the sequence, methlocations, and methcalls TXT files must be supplied manually to the mdir directory.')
 }
 if(grepl('fastq|fq',sam.file,ignore.case = T)){
-  warning('FASTQ file provided...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting (~50k reads/min)...')
+  show('FASTQ file provided...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting...')
   used.fastq=T
+  used.BSdata=T
 }else{
   used.fastq=F
+  used.BSdata=F
 }
   
 #######################
@@ -625,6 +627,263 @@ map.fragments <- function(read,Cm,Chm,C.key,read.length,FWD,REV) {
 
 }
 
+# Fragment mapping algorithm
+map.fragmentsBS <- function(read,read.length,FWD,REV,FWD.sites,REV.sites) {
+  
+  indel.fixBS <- function(DATA,FWDo,REVo,FWDc,REVc){
+    find.indelBS <- function(FWD.I,REV.I,fID){
+      res=data.frame('indel'=rep(NA,times=length(fID)),'id'=rep(NA,times=length(fID)))
+      for(i in 1:(length(fID)-1)){
+        if(!is.na(fID[i]) & !is.na(fID[i+1])){
+          if(fID[i]==fID[i+1]){
+            if(sum(which(!is.na(c(FWD.I[i,],REV.I[i,]))) %in% which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))==0){
+              if(mean(which(!is.na(c(FWD.I[i,],REV.I[i,])))) < mean(which(!is.na(c(FWD.I[i+1,],REV.I[i+1,]))))){
+                if(diff(range(na.omit(c(FWD.I[i:(i+1),],REV.I[i:(i+1),]))))<=(ncol(FWD.I)+ins.tol)){
+                  res$indel[i]=T
+                  res$id[i]=fID[i]
+                }else{
+                  res$indel[i]=F
+                }
+              }else{
+                res$indel[i]=F
+              }
+            }else{
+              res$indel[i]=F
+            }
+          }else{
+            res$indel[i]=F
+          }
+        }else{
+          res$indel[i]=F
+        }
+      }
+      return(res)
+    }
+    
+    sort.id=order(rowMeans(cbind(DATA$FWD.I,DATA$REV.I),na.rm = T))
+    #
+    FWD.index=DATA$FWD.I[sort.id,]
+    REV.index=DATA$REV.I[sort.id,]
+    Q.reads=DATA$Q[sort.id,]
+    #
+    indels=find.indelBS(FWD.index,REV.index,Q.reads[,3])
+    indel.id=which(indels$indel)
+    if(isempty(indel.id)){
+      return(DATA)
+    }else{
+      FWD.align=DATA$FWD.align[sort.id,]
+      REV.align=DATA$REV.align[sort.id,]
+      FWD.Chm=DATA$FWD.Chm[sort.id,]
+      REV.Chm=DATA$REV.Chm[sort.id,]
+      FWD.Cm=DATA$FWD.Cm[sort.id,]
+      REV.Cm=DATA$REV.Cm[sort.id,]
+      #
+      for(i in length(indel.id):1){
+        if((indels$id[which(indels$indel)])[i]=='FWD'){
+          FWD.align[indel.id[i],which(FWD.align[indel.id[i]+1,]!='x')]=FWD.align[indel.id[i]+1,which(FWD.align[indel.id[i]+1,]!='x')]
+          FWD.index[indel.id[i],which(!is.na(FWD.index[indel.id[i]+1,]))]=FWD.index[indel.id[i]+1,which(!is.na(FWD.index[indel.id[i]+1,]))]
+          FWD.Chm[indel.id[i],which(!is.na(FWD.Chm[indel.id[i]+1,]))]=FWD.Chm[indel.id[i]+1,which(!is.na(FWD.Chm[indel.id[i]+1,]))]
+          FWD.Cm[indel.id[i],which(!is.na(FWD.Cm[indel.id[i]+1,]))]=FWD.Cm[indel.id[i]+1,which(!is.na(FWD.Cm[indel.id[i]+1,]))]
+          Q.reads[indel.id[i],1]=(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)/length(FWDo)
+          Q.reads[indel.id[i],2]=sum(FWD.align[indel.id[i],]==FWDo | FWDo=='O')/(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)
+        }
+        if((indels$id[which(indels$indel)])[i]=='REV'){
+          REV.align[indel.id[i],which(REV.align[indel.id[i]+1,]!='x')]=REV.align[indel.id[i]+1,which(REV.align[indel.id[i]+1,]!='x')]
+          REV.index[indel.id[i],which(!is.na(REV.index[indel.id[i]+1,]))]=REV.index[indel.id[i]+1,which(!is.na(REV.index[indel.id[i]+1,]))]
+          REV.Chm[indel.id[i],which(!is.na(REV.Chm[indel.id[i]+1,]))]=REV.Chm[indel.id[i]+1,which(!is.na(REV.Chm[indel.id[i]+1,]))]
+          REV.Cm[indel.id[i],which(!is.na(REV.Cm[indel.id[i]+1,]))]=REV.Cm[indel.id[i]+1,which(!is.na(REV.Cm[indel.id[i]+1,]))]
+          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REV)
+          Q.reads[indel.id[i],2]=sum(REV.align[indel.id[i],]==REVo | REVo=='O')/(diff(range(which(REV.align[indel.id[i],]!='x')))+1)
+        }
+        if((indels$id[which(indels$indel)])[i]=='FWDc'){
+          FWD.align[indel.id[i],which(FWD.align[indel.id[i]+1,]!='x')]=FWD.align[indel.id[i]+1,which(FWD.align[indel.id[i]+1,]!='x')]
+          FWD.index[indel.id[i],which(!is.na(FWD.index[indel.id[i]+1,]))]=FWD.index[indel.id[i]+1,which(!is.na(FWD.index[indel.id[i]+1,]))]
+          FWD.Chm[indel.id[i],which(!is.na(FWD.Chm[indel.id[i]+1,]))]=FWD.Chm[indel.id[i]+1,which(!is.na(FWD.Chm[indel.id[i]+1,]))]
+          FWD.Cm[indel.id[i],which(!is.na(FWD.Cm[indel.id[i]+1,]))]=FWD.Cm[indel.id[i]+1,which(!is.na(FWD.Cm[indel.id[i]+1,]))]
+          Q.reads[indel.id[i],1]=(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)/length(FWDo)
+          Q.reads[indel.id[i],2]=sum(FWD.align[indel.id[i],]==FWDc | FWDc=='O')/(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)
+        }
+        if((indels$id[which(indels$indel)])[i]=='REVc'){
+          REV.align[indel.id[i],which(REV.align[indel.id[i]+1,]!='x')]=REV.align[indel.id[i]+1,which(REV.align[indel.id[i]+1,]!='x')]
+          REV.index[indel.id[i],which(!is.na(REV.index[indel.id[i]+1,]))]=REV.index[indel.id[i]+1,which(!is.na(REV.index[indel.id[i]+1,]))]
+          REV.Chm[indel.id[i],which(!is.na(REV.Chm[indel.id[i]+1,]))]=REV.Chm[indel.id[i]+1,which(!is.na(REV.Chm[indel.id[i]+1,]))]
+          REV.Cm[indel.id[i],which(!is.na(REV.Cm[indel.id[i]+1,]))]=REV.Cm[indel.id[i]+1,which(!is.na(REV.Cm[indel.id[i]+1,]))]
+          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REV)
+          Q.reads[indel.id[i],2]=sum(REV.align[indel.id[i],]==REVc | REVc=='O')/(diff(range(which(REV.align[indel.id[i],]!='x')))+1)
+        }
+      }
+      #
+      FWD.align[(indel.id+1),]='x'
+      REV.align[(indel.id+1),]='x'
+      FWD.Chm[(indel.id+1),]=NA
+      REV.Chm[(indel.id+1),]=NA
+      FWD.Cm[(indel.id+1),]=NA
+      REV.Cm[(indel.id+1),]=NA
+      FWD.index[(indel.id+1),]=NA
+      REV.index[(indel.id+1),]=NA
+      Q.reads[(indel.id+1),]=NA
+      #
+      res=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q.reads),'FWD.I'=FWD.index,'REV.I'=REV.index)
+      return(res)
+    }
+  }
+  
+  bounds <- function(data){
+    slideSum <- function(x,n=1){
+      data=c(rep(0,times=n),x,rep(0,times=n))
+      results=rep(NA,times=length(x))
+      for(i in 1:length(x)){
+        results[i]=sum(data[i:(i+2*n)])
+      }
+      return(results)
+    }
+    s1=slideSum(as.integer(data))
+    if(sum(s1>1 & as.numeric(data))==0){
+      return(NULL)
+    }
+    s2=range(which(s1>1 & as.numeric(data)))
+    results=rep(F,times=length(data))
+    results[s2[1]:s2[2]]=T
+    return(results)
+  }
+  
+  get.scores <- function(poly.ref,FWDo,REVo,FWDc,REVc){
+    FWDo.score=rep(0,times=length(poly.ref)+length(FWD))
+    REVo.score=rep(0,times=length(poly.ref)+length(REV))
+    FWDc.score=rep(0,times=length(poly.ref)+length(FWD))
+    REVc.score=rep(0,times=length(poly.ref)+length(REV))
+    for(i in 1:length(REVo)){
+      FWDo.score[which(poly.ref==FWDo[i])-i+1+length(FWDo)]=FWDo.score[which(poly.ref==FWDo[i])-i+1+length(FWDo)]+(1/length(FWDo))
+      FWDo.score[which(poly.ref!=FWDo[i] & poly.ref!='x')-i+1+length(FWDo)]=FWDo.score[which(poly.ref!=FWDo[i] & poly.ref!='x')-i+1+length(FWDo)]-(1/length(FWDo)/10)
+      REVo.score[which(poly.ref==REVo[i])-i+1+length(REVo)]=REVo.score[which(poly.ref==REVo[i])-i+1+length(REVo)]+(1/length(REVo))
+      REVo.score[which(poly.ref!=REVo[i] & poly.ref!='x')-i+1+length(REVo)]=REVo.score[which(poly.ref!=REVo[i] & poly.ref!='x')-i+1+length(REVo)]-(1/length(REVo)/10)
+      FWDc.score[which(poly.ref==FWDc[i])-i+1+length(FWDc)]=FWDc.score[which(poly.ref==FWDc[i])-i+1+length(FWDc)]+(1/length(FWDc))
+      FWDc.score[which(poly.ref!=FWDc[i] & poly.ref!='x')-i+1+length(FWDc)]=FWDc.score[which(poly.ref!=FWDc[i] & poly.ref!='x')-i+1+length(FWDc)]-(1/length(FWDc)/10)
+      REVc.score[which(poly.ref==REVc[i])-i+1+length(REVc)]=REVc.score[which(poly.ref==REVc[i])-i+1+length(REVc)]+(1/length(REVc))
+      REVc.score[which(poly.ref!=REVc[i] & poly.ref!='x')-i+1+length(REVc)]=REVc.score[which(poly.ref!=REVc[i] & poly.ref!='x')-i+1+length(REVc)]-(1/length(REVc)/10)
+    }
+    res=data.frame('fwd'=FWDo.score,'rev'=REVo.score,'fwdC'=FWDc.score,'revC'=REVc.score)
+    return(res)
+  }
+  
+  if(nchar(read)<min(read.length) | nchar(read)>max(read.length)){
+    DATA='blank' # bypasses polymers outside desired length range
+  } else {
+    # redefine FWD/REV reference strands for screening
+    FWDo=FWD; FWDo[FWD=='C']='T'; FWDo[c(FWD.sites)]='O'
+    FWDc=FWD; FWDc[FWD=='G']='A'; FWDc[c(FWD.sites+1)]='O'
+    REVo=REV; REVo[REV=='C']='T'; REVo[c(REV.sites)]='O'
+    REVc=REV; REVc[REV=='G']='A'; REVc[c(REV.sites+1)]='O'
+    #
+    NN=round(nchar(read)/mean(c(length(FWD),length(REV)))+0.4)+padding # sets the maximum number of fragments allowed to be mapped to the polymer
+    poly.ref=str_split(read,'')[[1]]
+    COUNTER=1
+    #
+    FWD.align=matrix('x',nrow=NN,ncol = length(FWD)); colnames(FWD.align)<-paste0(FWD,'.',1:length(FWD))
+    REV.align=matrix('x',nrow=NN,ncol = length(REV)); colnames(REV.align)<-paste0(REV,'.',1:length(REV))
+    FWD.Chm=matrix(NA,nrow=NN,ncol = length(FWD)); colnames(FWD.Chm)<-paste0(FWD,'.',1:length(FWD))
+    REV.Chm=matrix(NA,nrow=NN,ncol = length(REV)); colnames(REV.Chm)<-paste0(REV,'.',1:length(REV))
+    FWD.Cm=FWD.Chm
+    REV.Cm=REV.Chm
+    FWD.I=matrix(NA,nrow=NN,ncol = length(FWD))
+    REV.I=matrix(NA,nrow=NN,ncol = length(REV))
+    Q=as.data.frame(matrix(NA,nrow=NN,ncol = 3));colnames(Q) <- c('comp','match','id')
+    #
+    for (j in COUNTER:NN){
+      if(sum(poly.ref!="x")<10){
+        break # terminates further alignment attempts when less than 10 bases in the polymer remain unmapped
+      }
+      #
+      align.scores=get.scores(poly.ref,FWDo,REVo,FWDc,REVc)
+      coin.flip='l'
+      if(max(align.scores[,3:4])>=max(align.scores[,1:2])){
+        if(max(align.scores$fwdC)==max(align.scores$revC)){
+          coin.flip=sample(c('F','R'),1)
+        }
+        if(max(align.scores$fwdC)>max(align.scores$revC) | coin.flip=='F'){
+          edges=bounds(c(rep('x',times=length(FWDc)),poly.ref,rep('x',times=length(FWDc)))[(which.max(align.scores$fwdC)):(which.max(align.scores$fwdC)+length(FWDc)-1)]==FWDc | (FWDc=='O' & c(rep('x',times=length(FWDc)),poly.ref,rep('x',times=length(FWDc)))[(which.max(align.scores$fwdC)):(which.max(align.scores$fwdC)+length(FWDc)-1)]!='x'))
+          if(is.null(edges)){
+            break
+          }
+          FWD.align[j,which(edges)]=poly.ref[(which.max(align.scores$fwdC)-length(FWDc)+which(edges)-1)]
+          FWD.I[j,which(edges)]=(which.max(align.scores$fwdC)-length(FWDc)+which(edges)-1)
+          #
+          Q[j,1]=sum(edges)/length(FWDc)
+          Q[j,2]=mean(poly.ref[(which.max(align.scores$fwdC)-length(FWDc)+which(edges)-1)]==FWDc[edges] | FWDc[edges]=='O')
+          Q[j,3]='FWDc'
+          #
+          poly.ref[(which.max(align.scores$fwdC)-length(FWDc)+which(edges)-1)]='x'
+        }
+        if(max(align.scores$fwdC)<max(align.scores$revC) | coin.flip=='R'){
+          edges=bounds(c(rep('x',times=length(REVc)),poly.ref,rep('x',times=length(REVc)))[(which.max(align.scores$revC)):(which.max(align.scores$revC)+length(REVc)-1)]==REVc | (REVc=='O' & c(rep('x',times=length(REVc)),poly.ref,rep('x',times=length(REVc)))[(which.max(align.scores$revC)):(which.max(align.scores$revC)+length(REVc)-1)]!='x'))
+          if(is.null(edges)){
+            break
+          }
+          REV.align[j,which(edges)]=poly.ref[(which.max(align.scores$revC)-length(REVc)+which(edges)-1)]
+          REV.I[j,which(edges)]=(which.max(align.scores$revC)-length(REVc)+which(edges)-1)
+          #
+          Q[j,1]=sum(edges)/length(REVc)
+          Q[j,2]=mean(poly.ref[(which.max(align.scores$revC)-length(REVc)+which(edges)-1)]==REVc[edges] | REVc[edges]=='O')
+          Q[j,3]='REVc'
+          #
+          poly.ref[(which.max(align.scores$revC)-length(REVc)+which(edges)-1)]='x'
+        }
+      }
+      if(max(align.scores[,3:4])<max(align.scores[,1:2])){
+        if(max(align.scores$fwd)==max(align.scores$rev)){
+          coin.flip=sample(c('F','R'),1)
+        }
+        if(max(align.scores$fwd)>max(align.scores$rev) | coin.flip=='F'){
+          edges=bounds(c(rep('x',times=length(FWDo)),poly.ref,rep('x',times=length(FWDo)))[(which.max(align.scores$fwd)):(which.max(align.scores$fwd)+length(FWDo)-1)]==FWDo | (FWDo=='O' & c(rep('x',times=length(FWDo)),poly.ref,rep('x',times=length(FWDo)))[(which.max(align.scores$fwd)):(which.max(align.scores$fwd)+length(FWDo)-1)]!='x'))
+          if(is.null(edges)){
+            break
+          }
+          FWD.align[j,which(edges)]=poly.ref[(which.max(align.scores$fwd)-length(FWDo)+which(edges)-1)]
+          FWD.I[j,which(edges)]=(which.max(align.scores$fwd)-length(FWDo)+which(edges)-1)
+          #
+          Q[j,1]=sum(edges)/length(FWDo)
+          Q[j,2]=mean(poly.ref[(which.max(align.scores$fwd)-length(FWDo)+which(edges)-1)]==FWDo[edges] | FWDo[edges]=='O')
+          Q[j,3]='FWD'
+          #
+          poly.ref[(which.max(align.scores$fwd)-length(FWDo)+which(edges)-1)]='x'
+        }
+        if(max(align.scores$fwd)<max(align.scores$rev) | coin.flip=='R'){
+          edges=bounds(c(rep('x',times=length(REVo)),poly.ref,rep('x',times=length(REVo)))[(which.max(align.scores$rev)):(which.max(align.scores$rev)+length(REVo)-1)]==REVo | (REVo=='O' & c(rep('x',times=length(REVo)),poly.ref,rep('x',times=length(REVo)))[(which.max(align.scores$rev)):(which.max(align.scores$rev)+length(REVo)-1)]!='x'))
+          if(is.null(edges)){
+            break
+          }
+          REV.align[j,which(edges)]=poly.ref[(which.max(align.scores$rev)-length(REVo)+which(edges)-1)]
+          REV.I[j,which(edges)]=(which.max(align.scores$rev)-length(REVo)+which(edges)-1)
+          #
+          Q[j,1]=sum(edges)/length(REVo)
+          Q[j,2]=mean(poly.ref[(which.max(align.scores$rev)-length(REVo)+which(edges)-1)]==REVo[edges] | REVo[edges]=='O')
+          Q[j,3]='REV'
+          #
+          poly.ref[(which.max(align.scores$rev)-length(REVo)+which(edges)-1)]='x'
+        }
+      }
+    }
+
+    # create methylation matrices
+    FWD.Cm[FWD.align=='T' & matrix(FWD=='C',nrow = nrow(FWD.align),ncol = ncol(FWD.align),byrow = T)]=0
+    FWD.Cm[FWD.align=='C' & matrix(FWD=='C',nrow = nrow(FWD.align),ncol = ncol(FWD.align),byrow = T)]=1
+    FWD.Chm[!is.na(FWD.Cm)]=0
+    REV.Cm[REV.align=='T' & matrix(REV=='C',nrow = nrow(REV.align),ncol = ncol(REV.align),byrow = T)]=0
+    REV.Cm[REV.align=='C' & matrix(REV=='C',nrow = nrow(REV.align),ncol = ncol(REV.align),byrow = T)]=1
+    REV.Chm[!is.na(REV.Cm)]=0
+    
+    # save relevant data from read to subset of stable variable
+    DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q),'FWD.I'=FWD.I,'REV.I'=REV.I)
+    if((sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1)){
+      DATA=indel.fix(DATA,FWD,REV)
+    }
+    
+  }
+  
+  return(DATA)
+  
+}
+
 # Mixed beta thresholding
 BM.thresh <- function(data.actual.fwd,data.actual.rev,met='RSS',p=(1-T1.err),set=BM.strand.data,p2=T2.err){
   if(set=='b'){
@@ -1020,13 +1279,6 @@ modk.sum <- function(melo,meca,seqq,thresh,methyl.type,fill.Cs){
   }
 }
 
-# Adapter for converting bisulfite sequencing FASTQ files into MeLoELF-compatible input txt files
-fastq.adapter <- function(read){
-  eM.Z=diff(c(0,which(as.numeric(gregexpr('C|U',read)[[1]]) %in% as.numeric(gregexpr('C',read)[[1]]))))-1
-  res=data.frame('read'=gsub('U','C',read),'melo'=paste0('EM:Z:C+h?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';C+m?',paste0(c(rbind(rep(',',times=length(eM.Z)),eM.Z)),collapse = ''),';',collapse = ''),'meca'=paste0('EL:B:C',paste0(rep(c(',',0),times=length(eM.Z)),collapse = ''),paste0(rep(c(',',256),times=length(eM.Z)),collapse = ''),collapse = ''))
-  return(res)
-}
-
 # Calculate processivity parameters from binarized matrix
 get.proc2 <- function(dat,mdl=proc.mdl){
   
@@ -1168,25 +1420,51 @@ if(crunch.too){
     if(sum(c(seq.file,meca.file,melo.file) %in% sam.file)==3){
       show('TXT files detected...bypassing pre-processing.')
       sam.file=NULL
+      used.fastq=F
+      used.BSdata=F
     }else{
       show('Pre-processed TXT files matching the relevant parameter names are unavailable...searching for SAM file.')
       sam.file=list.files(path = mdir,pattern = '*.sam')
       if(length(sam.file==1)){
         show("SAM file detected!")
+        used.fastq=F
+        used.BSdata=F
       }else{
-        show("Set sam.file='auto', but a single SAM file was not found in working directory...defaulting to search for FASTQ file.")
-        sam.file=list.files(path = mdir,pattern = '*.fastq')
+        show("Set sam.file='auto', but a single SAM file was not found in working directory...defaulting to search for DAT file from FASTQ pre-processing.")
+        sam.file=list.files(path = mdir,pattern = '*seq.dat')
         if(length(sam.file)==1){
-          show('FASTQ file detected...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting (~50k reads/min)...')
-          used.fastq=T
-          if(!modk.fillC){
-            stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
-          }
+          show('Pre-processed DAT file detected...it will be treated as bisulfite sequencing data.')
+          used.fastq=F
+          used.BSdata=T
         }else{
-          show('No single FASTQ file found in working directory...')
-          stop('ERROR! No proper input files found -- terminating run.')
+          show("A pre-processed DAT file was not found in working directory...defaulting to search for FASTQ file.")
+          sam.file=list.files(path = mdir,pattern = '*.fastq')
+          if(length(sam.file)==1){
+            show('FASTQ file detected...it will be treated as bisulfite sequencing data, and input adapted accordingly. Adapting...')
+            used.fastq=T
+            used.BSdata=T
+          }else{
+            show('No single FASTQ file found in working directory...')
+            stop('ERROR! No proper input files found -- terminating run.')
+          }
         }
       }
+    }
+  }
+  
+  # check parameters for bisulfite data compatibility
+  if(used.BSdata){
+    if(methyl.type=='H'){
+      stop('ERROR: Bisulfite sequencing data has been provided, but only hydroxy-methyl groups are targeted by the methyl.type parameter...a methyl ("M") or combined ("B") setting is required.')
+    }
+    if(!is.numeric(thresh.meth)){
+      show('WARNING: A manual methylation score threshold is recommended for bisulfite sequencing data...coercing thresh.meth to a value of 0.5.')
+      thresh.meth=0.5
+    }
+    show("WARNING: The modk.fillC parameter and associated analyses will be ignored for bisulfite sequencing data.")
+    if(exact.search!=F){
+      show('WARNING: Only the default, comprehensive mapping algorithm is supported for bisulfite sequencing data...coercing exact.search to FALSE.')
+      exact.search=F
     }
   }
   
@@ -1194,21 +1472,13 @@ if(crunch.too){
   if(used.fastq){
     pre.q=fread(sam.file,header = F,sep = '\t')
     pre.q=pre.q[seq(2,nrow(pre.q),4),1]
-    registerDoParallel(detectCores())
-    ONTsim <- foreach(i = 1:length(pre.q),.combine = 'rbind') %dopar% {
-      fastq.adapter(pre.q[i])
-    }
-    fwrite(x = as.list(ONTsim$read),file = seq.file,sep = '\n',col.names = F,quote = F)
-    fwrite(x = as.list(ONTsim$melo),file = melo.file,sep = '\n',col.names = F,quote = F)
-    fwrite(x = as.list(ONTsim$meca),file = meca.file,sep = '\n',col.names = F,quote = F)
+    fwrite(x = as.list(pre.q),file = 'FASTQseq.dat',sep = '\n',col.names = F,quote = F)
+    rm(pre.q)
     show('...file adaptation complete!')
-    if(!modk.fillC){
-      stop("ERROR: Bisulfite sequencing FASTQ files should be analyzed with modk.fillC=T to ensure proper methylation assignment for C basecalls.")
-    }
   }
   
   # process relevant sam file information into individual txt files for loading
-  if(!is.null(sam.file) & !used.fastq){
+  if(!is.null(sam.file) & !used.BSdata){
     try(system(paste0("awk 'NR > ",sam.indices[4]," {print $",sam.indices[1],"}' ",getwd(),"/",sam.file," > ",getwd(),"/",seq.file)))
     if(sam.indices[2]=='auto'){
       try(system(paste0("awk 'NR > ",sam.indices[4]," {for (i=1;i<=NF;i++){if ($i ~/MM:Z/) {print $i}}}' ",getwd(),"/",sam.file," > ",getwd(),"/",melo.file)))
@@ -1226,10 +1496,15 @@ if(crunch.too){
   show(paste0('Align Start:  ',Sys.time()))
   
   # load pre-processed data files
-  raw=read.csv(file = seq.file,header = F,sep = ',') # load sequences from pre-processed file
-  raw.2=as.matrix(read.csv(melo.file,header = F,sep = ";")[,]) # load CpG indices from pre-processed file
-  raw.3=read.csv(meca.file,header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
-
+  if(!used.BSdata){
+    raw=read.csv(file = seq.file,header = F,sep = ',') # load sequences from pre-processed file
+    raw.2=as.matrix(read.csv(melo.file,header = F,sep = ";")[,]) # load CpG indices from pre-processed file
+    raw.3=read.csv(meca.file,header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
+  }
+  if(used.BSdata){
+    raw=read.csv(file = sam.file,header = F,sep = ',') # load sequences from pre-processed file
+  }
+  
   # convert input reference sequences into vector of bases
   FWD=str_extract_all(parent,boundary("character"))[[1]]
   REV=str_extract_all(target,boundary("character"))[[1]]
@@ -1241,9 +1516,11 @@ if(crunch.too){
   }
 
   # load CpG indices, hydroxy-methyl scores, and methyl scores into alignable arrays
-  Chm=str_split(raw.2[,1],',')
-  Cm=str_split(raw.2[,2],',')
-  C.key=str_split(raw.3[,1],',')
+  if(!used.BSdata){
+    Chm=str_split(raw.2[,1],',')
+    Cm=str_split(raw.2[,2],',')
+    C.key=str_split(raw.3[,1],',')
+  }
 
   # loop to perform parallelized alignments with scoring on a per-read basis
   registerDoParallel(detectCores())
@@ -1253,8 +1530,15 @@ if(crunch.too){
     }
   }else{
     if(exact.search==F){
-      DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
-        map.fragments(read=raw[seq,1],Cm = cumsum(as.numeric(Cm[[seq]][-1])+1),Chm = cumsum(as.numeric(Chm[[seq]][-1])+1),round(as.numeric(C.key[[seq]][-1])/256,2),read.length=read.length,FWD=FWD,REV=REV)
+      if(!used.BSdata){
+        DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
+          map.fragments(read=raw[seq,1],Cm = cumsum(as.numeric(Cm[[seq]][-1])+1),Chm = cumsum(as.numeric(Chm[[seq]][-1])+1),round(as.numeric(C.key[[seq]][-1])/256,2),read.length=read.length,FWD=FWD,REV=REV)
+        }
+      }
+      if(used.BSdata){
+        DATA <- foreach(seq = 1:nrow(raw)) %dopar% {
+          map.fragmentsBS(read=raw[seq,1],read.length=read.length,FWD=FWD,REV=REV,FWD.sites = FWD.sites,REV.sites = REV.sites)
+        }
       }
     }
     if(is.integer(exact.search) | is.numeric(exact.search)){
@@ -1308,7 +1592,7 @@ if(crunch.too){
   DATA[['RSs']]=raw$V1
 
   # export generated alignment data to RData file
-  save(DATA,file = align.file)
+  save(DATA,used.BSdata,file = align.file)
 
   # time-stamp for end of alignment job
   show(paste0('Align End:  ',Sys.time()))
@@ -1328,9 +1612,21 @@ if(process){
   if (!exists('DATA')) {
     load(align.file)
   }else{
-    rm(list=c(setdiff(ls(),c(PAR.list,'DATA'))))
+    rm(list=c(setdiff(ls(),c(PAR.list,'DATA','used.BSdata'))))
   }
 
+  # check parameters for bisulfite data compatibility
+  if(used.BSdata){
+    if(methyl.type=='H'){
+      stop('ERROR: Bisulfite sequencing data has been provided, but only hydroxy-methyl groups are targeted by the methyl.type parameter...a methyl ("M") or combined ("B") setting is required.')
+    }
+    if(!is.numeric(thresh.meth)){
+      show('WARNING: A manual methylation score threshold is recommended for bisulfite sequencing data...coercing thresh.meth to a value of 0.5.')
+      thresh.meth=0.5
+    }
+    show("WARNING: The modk.fillC parameter and associated analyses will be ignored for bisulfite sequencing data.")
+  }
+  
   # set read length filters
   if(is.null(read.length)){
     r98=(DATA[['RLs']][order(as.numeric(DATA[['RLs']]))])[round(0.98*length(DATA[['RLs']]))]
@@ -1704,33 +2000,41 @@ if(process){
   write.csv(summary, "survival_summary.csv")
 
   # calculate Modkit-like overall methylation for reads
-  check.melo=fread(file = melo.file,header = F,sep = ';',fill = T)[,-3]
-  check.meca=fread(file = meca.file,header = F,sep = ';')[,1]
-  check.seq=fread(file = seq.file,header = F,sep = ';')[,1]
-  #
-  registerDoParallel(detectCores())
-  if(var.thresh<2 | pre.ligated){
-    modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
-      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = thresh,fill.Cs = modk.fillC)
+  if(!used.BSdata){
+    check.melo=fread(file = melo.file,header = F,sep = ';',fill = T)[,-3]
+    check.meca=fread(file = meca.file,header = F,sep = ';')[,1]
+    check.seq=fread(file = seq.file,header = F,sep = ';')[,1]
+    #
+    registerDoParallel(detectCores())
+    if(var.thresh<2 | pre.ligated){
+      modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
+        modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = thresh,fill.Cs = modk.fillC)
+      }
     }
-  }
-  if(var.thresh==2 & !(pre.ligated)){
-    modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
-      modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = mean(threshIrev),fill.Cs = modk.fillC)
+    if(var.thresh==2 & !(pre.ligated)){
+      modk.dat <- foreach(i = 1:length(check.seq),.combine = 'rbind') %dopar% {
+        modk.sum(melo = check.melo[i,],meca = check.meca[i],seqq = check.seq[i],methyl.type = methyl.type,thresh = mean(threshIrev),fill.Cs = modk.fillC)
+      }
     }
+    rm(check.meca,check.melo,check.seq)
+    #
+    used.set=which(DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length))
+    all.modk=sum(modk.dat$pC*modk.dat$Nc,na.rm = T)/sum(modk.dat$Nc)
+    used.modk=sum(modk.dat$pC[used.set]*modk.dat$Nc[used.set],na.rm = T)/sum(modk.dat$Nc[used.set])
+    filt.modk=sum(modk.dat$pC[-used.set]*modk.dat$Nc[-used.set],na.rm = T)/sum(modk.dat$Nc[-used.set])
+    rm(modk.dat)
   }
-  rm(check.meca,check.melo,check.seq)
-  #
-  used.set=which(DATA[['RLs']]>=min(read.length) & DATA[['RLs']]<=max(read.length))
-  all.modk=sum(modk.dat$pC*modk.dat$Nc,na.rm = T)/sum(modk.dat$Nc)
-  used.modk=sum(modk.dat$pC[used.set]*modk.dat$Nc[used.set],na.rm = T)/sum(modk.dat$Nc[used.set])
-  filt.modk=sum(modk.dat$pC[-used.set]*modk.dat$Nc[-used.set],na.rm = T)/sum(modk.dat$Nc[-used.set])
-  rm(modk.dat)
 
   # quality control analyses
   if(!pre.ligated){
     read.filt=nrow(data.actual.rev)/sum(Q.reads[,3]=='REV',na.rm = T)
     read.filt.fwd=nrow(data.actual.fwd)/sum(Q.reads[,3]=='FWD',na.rm = T)
+    if(used.BSdata){
+      SeqFrac.Fo=sum(Q.reads[,3]=='FWD',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
+      SeqFrac.Ro=sum(Q.reads[,3]=='REV',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
+      SeqFrac.Fc=sum(Q.reads[,3]=='FWDc',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
+      SeqFrac.Rc=sum(Q.reads[,3]=='REVc',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
+    }
     fNA.fwd=colSums(is.na(fwd.binary))/nrow(fwd.binary)
     fNA.rev=colSums(is.na(rev.binary))/nrow(rev.binary)
     fCpGs.fwd=colSums(fwd.binary,na.rm = T)/colSums(!is.na(fwd.binary))
@@ -1810,196 +2114,203 @@ if(process){
       text(x=(5*length(FWD.sites)+4)*1.04,y=c(0.8,0.7,0.6),pos = 2,col = c('red','purple','orange'),cex = 1.0,labels = paste0('(',round(100*c(fMs.fwd,fSs.fwd,read.filt.fwd)),'%) ',round(100*c(fMs.rev,fSs.rev,read.filt)),c('% CpG','% Sub.','% Qual.')))
     }
     text(x=0,y=1.07,pos=4,labels=paste0('[',round(100*pMAP0),'%]  ',round(100*pMAP),'/',round(100*pMAP2),'% Map'),col='cyan',cex=1.3)
-    text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5(h)mC'),col='grey',cex=1.3)
-    #
-    dev.off()
-  }
-  png('FragPos.png', height = 2650, width = 2800, res=300)
-  #
-  par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
-  f=1
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = paste0(plot_title,'Fragment Positions: Relative to Read'))
-  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
-  lines(pdf.make(FragPos.revQ[,f]),col='red')
-  legend('topright',legend = c('Both',plot.nom),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
-  #
-  par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
-  f=2
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'From Nearest Edge')
-  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
-  lines(pdf.make(FragPos.revQ[,f]),col='red')
-  #
-  par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
-  f=3
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 5' End")
-  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
-  lines(pdf.make(FragPos.revQ[,f]),col='red')
-  #
-  par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
-  f=4
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 3' End")
-  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
-  lines(pdf.make(FragPos.revQ[,f]),col='red')
-  #
-  par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
-  f=5
-  plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "From Read Center")
-  lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
-  lines(pdf.make(FragPos.revQ[,f]),col='red')
-  #
-  dev.off()
-  #
-  if(!(exact.search==T)){
-    png('FragSeq.png', height = round(2650*0.7), width = 2800, res=300)
-    par(mfrow=c(1,1),mar=c(6,3,3,1))
-    #
-    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(DATA[['FWD']])+1),main = paste0(plot_title,'Substrate Sequencing Accuracy'),cex.axis = 1.3,ylab = '',yaxt='n',cex.lab=1.3,cex.main=2,xaxt='n',xlab='')
-    abline(v=FWD.sites+1/2,lty='dotted',col='grey',lwd=2)
-    lines(FWD.good,col='blue',lty='solid',lwd=5)
-    lines(FWD.err,col='blue',lty='solid',lwd=5)
-    lines(FWD.miss,col='blue',lty='solid',lwd=5)
-    lines(rev(REV.good),col='red',lty='solid',lwd=5)
-    lines(rev(REV.err),col='red',lty='solid',lwd=5)
-    lines(rev(REV.miss),col='red',lty='solid',lwd=5)
-    lines(FWD.good,col='grey',lty='solid',lwd=1.5)
-    lines(FWD.err,col='black',lty='solid',lwd=1.5)
-    lines(FWD.miss,col='white',lty='solid',lwd=1.5)
-    lines(rev(REV.good),col='grey',lty='solid',lwd=1.5)
-    lines(rev(REV.err),col='black',lty='solid',lwd=1.5)
-    lines(rev(REV.miss),col='white',lty='solid',lwd=1.5)
-    legend('topright',legend = c(plot.nom,'Correct','Miscall','Deletion'),col = c('blue','red','grey','black','white'),fill=c('blue','red','grey','black','white'),bty = 'n',cex=1)
-    axis(side = 2,line = 0,at = c(0,0.25,0.5,3/4,1),labels = c('0%','25%','50%','75%','100%'),tick = T,cex.axis=1.3,col.axis = 'black')
-    axis(side = 1,at = c(0:(length(DATA[['FWD']])+1)),labels = c("5'",DATA[['FWD']],"3'"),cex.axis=0.7,col.axis = 'blue')
-    axis(side = 1,line = 1,at = c(0:(length(DATA[['REV']])+1)),labels = rev(c("5'",DATA[['REV']],"3'")),tick = F,cex.axis=0.7,col.axis = 'red')
+    if(!used.BSdata){
+      text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5(h)mC'),col='grey',cex=1.3)
+    }else{
+      text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('Orig. F/R = ',round(100*SeqFrac.Fo),'/',round(100*SeqFrac.Ro),'% (',round(100*SeqFrac.Fc),'/',round(100*SeqFrac.Rc),'%)'),col='grey',cex=1.3)
+    }
     #
     dev.off()
   }
   #
-  if(T){
-    png('FwdRevReadBias.png', height = round(2650*0.8), width = 2800, res=300)
-    par(mfrow=c(1,1),mar=c(5,5,3,1))
+  if(!used.BSdata){
+    png('FragPos.png', height = 2650, width = 2800, res=300)
     #
-    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(FRskew,pars = c(-1.1,1.1,0.05))$y,pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05))$y))),xlim=c(-1.1,1.1),main = paste0(plot_title,plot.nom[1],' vs ',plot.nom[2],' Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'))
-    lines(pdf.make(FRskew,pars = c(-1.1,1.1,0.05)),col='black',lty='solid',lwd=4)
-    lines(pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05)),col='purple',lty='solid',lwd=4)
-    legend('top',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    par(fig=c(0,1,0.67,1),mar=c(5,5,3,1))
+    f=1
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,1),lwd=3,xlab="Read Location (5' -> 3')",ylab='Density',main = paste0(plot_title,'Fragment Positions: Relative to Read'))
+    lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+    lines(pdf.make(FragPos.revQ[,f]),col='red')
+    legend('topright',legend = c('Both',plot.nom),fill = c('black','blue','red'),col=c('black','blue','red'),bty = 'n')
     #
-    dev.off()
-  }
-  #
-  if(T){
-    png('MethylReadBias.png', height = round(2650*0.8), width = 2800, res=300)
-    par(mfrow=c(1,1),mar=c(5,5,3,1))
+    par(fig=c(0,0.5,0.33,0.67),mar=c(5,5,3,1),new=T)
+    f=2
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,5),lwd=3,xlab='Fragments Away',ylab='Density',main = 'From Nearest Edge')
+    lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+    lines(pdf.make(FragPos.revQ[,f]),col='red')
     #
-    plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Fragment-CpG Methyl Score Average'))
-    lines(pdf.make(Mskew,pars = c(0,1,0.025)),col='black',lty='solid',lwd=4)
-    lines(pdf.make(MskewQ,pars = c(0,1,0.025)),col='purple',lty='solid',lwd=4)
-    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    par(fig=c(0.5,1,0.33,0.67),mar=c(5,5,3,1),new=T)
+    f=3
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(0,10),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 5' End")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+    lines(pdf.make(FragPos.revQ[,f]),col='red')
     #
-    dev.off()
-  }
-  #
-  if(T){
-    png('FRbiasLengthCorr.png', height = round(2650*0.8), width = 2800, res=300)
-    par(mfrow=c(1,1),mar=c(5,5,3,1))
+    par(fig=c(0,0.5,0,0.33),mar=c(5,5,3,1),new=T)
+    f=4
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-10,0),lwd=3,xlab='Fragments Away',ylab='Density',main = "From 3' End")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+    lines(pdf.make(FragPos.revQ[,f]),col='red')
     #
-    x1=DATA[['RLs']][unique(na.omit(as.numeric(Q.reads[,4])))]
-    x2=DATA[['RLs']][as.numeric(unique(Q.reads[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))]
-    #
-    plot(NULL,NULL,ylim=c(-1,1),xlim=c(0,max(x1)),main = paste0(plot_title,plot.nom[1],':',plot.nom[2],' Polymer Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
-    contour(kde2d(x1,FRskew),col='black',lwd=1.5,add=T)
-    contour(kde2d(x2,FRskewQ),col='purple',lwd=1,add=T)
-    lines(smooth.spline(x1,FRskew,spar = 0.7),col='black',lty='solid',lwd=4)
-    lines(smooth.spline(x2,FRskewQ,spar = 0.7),col='purple',lty='solid',lwd=4)
-    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+    par(fig=c(0.5,1,0,0.33),mar=c(5,5,3,1),new=T)
+    f=5
+    plot(pdf.make(c(FragPos.fwdQ[,f],FragPos.revQ[,f])),ylim=c(0,max(c(pdf.make(FragPos.fwdQ[,f])$y,pdf.make(FragPos.revQ[,f])$y))),xlim=c(-5,5),lwd=3,xlab='Fragments Away',ylab='Density',main = "From Read Center")
+    lines(pdf.make(FragPos.fwdQ[,f]),col='blue')
+    lines(pdf.make(FragPos.revQ[,f]),col='red')
     #
     dev.off()
-  }
-  #
-  if(T){
-    png('5mCbiasLengthCorr.png', height = round(2650*0.8), width = 2800, res=300)
-    par(mfrow=c(1,1),mar=c(5,5,3,1))
     #
-    x1=DATA[['RLs']][as.numeric(MskewZ$N)]
-    x2=DATA[['RLs']][as.numeric(MskewZQ$N)]
-    #
-    plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Fragment-CpG Methyl Score Average'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
-    contour(kde2d(x1,MskewZ$S),col='black',lwd=1.5,add=T)
-    contour(kde2d(x2,MskewZQ$S),col='purple',lwd=1,add=T)
-    lines(smooth.spline(x1,MskewZ$S,spar = 0.7),col='black',lty='solid',lwd=4)
-    lines(smooth.spline(x2,MskewZQ$S,spar = 0.7),col='purple',lty='solid',lwd=4)
-    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
-    #
-    dev.off()
-  }
-  #
-  if(T){
-    png('5mCReadPosCorr.png', height = round(2650*1.4), width = 2800, res=300)
-    par(mfrow=c(2,1),mar=c(5,5,3,1))
-    #
-    x1=c(FWD.index[,FWD.sites])
-    if(methyl.type=='B'){
-      y1=c((FWD.Chm+FWD.Cm)[,FWD.sites])
-    }
-    if(methyl.type=='M'){
-      y1=c(FWD.Cm[,FWD.sites])
-    }
-    if(methyl.type=='H'){
-      y1=c(FWD.Chm[,FWD.sites])
+    if(!(exact.search==T)){
+      png('FragSeq.png', height = round(2650*0.7), width = 2800, res=300)
+      par(mfrow=c(1,1),mar=c(6,3,3,1))
+      #
+      plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(DATA[['FWD']])+1),main = paste0(plot_title,'Substrate Sequencing Accuracy'),cex.axis = 1.3,ylab = '',yaxt='n',cex.lab=1.3,cex.main=2,xaxt='n',xlab='')
+      abline(v=FWD.sites+1/2,lty='dotted',col='grey',lwd=2)
+      lines(FWD.good,col='blue',lty='solid',lwd=5)
+      lines(FWD.err,col='blue',lty='solid',lwd=5)
+      lines(FWD.miss,col='blue',lty='solid',lwd=5)
+      lines(rev(REV.good),col='red',lty='solid',lwd=5)
+      lines(rev(REV.err),col='red',lty='solid',lwd=5)
+      lines(rev(REV.miss),col='red',lty='solid',lwd=5)
+      lines(FWD.good,col='grey',lty='solid',lwd=1.5)
+      lines(FWD.err,col='black',lty='solid',lwd=1.5)
+      lines(FWD.miss,col='white',lty='solid',lwd=1.5)
+      lines(rev(REV.good),col='grey',lty='solid',lwd=1.5)
+      lines(rev(REV.err),col='black',lty='solid',lwd=1.5)
+      lines(rev(REV.miss),col='white',lty='solid',lwd=1.5)
+      legend('topright',legend = c(plot.nom,'Correct','Miscall','Deletion'),col = c('blue','red','grey','black','white'),fill=c('blue','red','grey','black','white'),bty = 'n',cex=1)
+      axis(side = 2,line = 0,at = c(0,0.25,0.5,3/4,1),labels = c('0%','25%','50%','75%','100%'),tick = T,cex.axis=1.3,col.axis = 'black')
+      axis(side = 1,at = c(0:(length(DATA[['FWD']])+1)),labels = c("5'",DATA[['FWD']],"3'"),cex.axis=0.7,col.axis = 'blue')
+      axis(side = 1,line = 1,at = c(0:(length(DATA[['REV']])+1)),labels = rev(c("5'",DATA[['REV']],"3'")),tick = F,cex.axis=0.7,col.axis = 'red')
+      #
+      dev.off()
     }
     #
-    x2=c(FWD.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
-    if(methyl.type=='B'){
-      y2=c((FWD.Chm+FWD.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
-    }
-    if(methyl.type=='M'){
-      y2=c(FWD.Cm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
-    }
-    if(methyl.type=='H'){
-      y2=c(FWD.Chm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
-    }
-    d1=na.omit(data.frame('x'=x1,'y'=y1))
-    d2=na.omit(data.frame('x'=x2,'y'=y2))
-    #
-    plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[1]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
-    contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
-    contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
-    lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
-    lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
-    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
-    #
-    #
-    x1=c(REV.index[,REV.sites])
-    if(methyl.type=='B'){
-      y1=c((REV.Chm+REV.Cm)[,REV.sites])
-    }
-    if(methyl.type=='M'){
-      y1=c(REV.Cm[,REV.sites])
-    }
-    if(methyl.type=='H'){
-      y1=c(REV.Chm[,REV.sites])
+    if(T){
+      png('FwdRevReadBias.png', height = round(2650*0.8), width = 2800, res=300)
+      par(mfrow=c(1,1),mar=c(5,5,3,1))
+      #
+      plot(NULL,NULL,ylim=c(0,max(c(pdf.make(FRskew,pars = c(-1.1,1.1,0.05))$y,pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05))$y))),xlim=c(-1.1,1.1),main = paste0(plot_title,plot.nom[1],' vs ',plot.nom[2],' Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'))
+      lines(pdf.make(FRskew,pars = c(-1.1,1.1,0.05)),col='black',lty='solid',lwd=4)
+      lines(pdf.make(FRskewQ,pars = c(-1.1,1.1,0.05)),col='purple',lty='solid',lwd=4)
+      legend('top',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      #
+      dev.off()
     }
     #
-    x2=c(REV.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
-    if(methyl.type=='B'){
-      y2=c((REV.Chm+REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+    if(T){
+      png('MethylReadBias.png', height = round(2650*0.8), width = 2800, res=300)
+      par(mfrow=c(1,1),mar=c(5,5,3,1))
+      #
+      plot(NULL,NULL,ylim=c(0,max(c(pdf.make(Mskew,pars = c(0,1,0.025))$y,pdf.make(MskewQ,pars = c(0,1,0.025))$y))),xlim=c(0,1),main = paste0(plot_title,'CpG vs 5(h)mCpG Per-Read Bias'),cex.axis = 1.4,ylab = 'Probability Density',cex.lab=1.6,cex.main=2,xlab=paste0('Fragment-CpG Methyl Score Average'))
+      lines(pdf.make(Mskew,pars = c(0,1,0.025)),col='black',lty='solid',lwd=4)
+      lines(pdf.make(MskewQ,pars = c(0,1,0.025)),col='purple',lty='solid',lwd=4)
+      legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      #
+      dev.off()
     }
-    if(methyl.type=='M'){
-      y2=c((REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
-    }
-    if(methyl.type=='H'){
-      y2=c((REV.Chm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
-    }
-    d1=na.omit(data.frame('x'=x1,'y'=y1))
-    d2=na.omit(data.frame('x'=x2,'y'=y2))
     #
-    plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[2]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
-    contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
-    contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
-    lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
-    lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
-    legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
-    dev.off()
+    if(T){
+      png('FRbiasLengthCorr.png', height = round(2650*0.8), width = 2800, res=300)
+      par(mfrow=c(1,1),mar=c(5,5,3,1))
+      #
+      x1=DATA[['RLs']][unique(na.omit(as.numeric(Q.reads[,4])))]
+      x2=DATA[['RLs']][as.numeric(unique(Q.reads[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))]
+      #
+      plot(NULL,NULL,ylim=c(-1,1),xlim=c(0,max(x1)),main = paste0(plot_title,plot.nom[1],':',plot.nom[2],' Polymer Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Proportion Bias (',plot.nom[2],' <--> ',plot.nom[1],')'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
+      contour(kde2d(x1,FRskew),col='black',lwd=1.5,add=T)
+      contour(kde2d(x2,FRskewQ),col='purple',lwd=1,add=T)
+      lines(smooth.spline(x1,FRskew,spar = 0.7),col='black',lty='solid',lwd=4)
+      lines(smooth.spline(x2,FRskewQ,spar = 0.7),col='purple',lty='solid',lwd=4)
+      legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      #
+      dev.off()
+    }
+    #
+    if(T){
+      png('5mCbiasLengthCorr.png', height = round(2650*0.8), width = 2800, res=300)
+      par(mfrow=c(1,1),mar=c(5,5,3,1))
+      #
+      x1=DATA[['RLs']][as.numeric(MskewZ$N)]
+      x2=DATA[['RLs']][as.numeric(MskewZQ$N)]
+      #
+      plot(NULL,NULL,ylim=c(0,1),xlim=c(0,max(x1)),main = paste0(plot_title,'CpG:5(h)mCpG Bias Correlation to Read Length'),cex.axis = 1.4,ylab = paste0('Fragment-CpG Methyl Score Average'),cex.lab=1.6,cex.main=1.5,xlab=paste0('Read Length (bp)'))
+      contour(kde2d(x1,MskewZ$S),col='black',lwd=1.5,add=T)
+      contour(kde2d(x2,MskewZQ$S),col='purple',lwd=1,add=T)
+      lines(smooth.spline(x1,MskewZ$S,spar = 0.7),col='black',lty='solid',lwd=4)
+      lines(smooth.spline(x2,MskewZQ$S,spar = 0.7),col='purple',lty='solid',lwd=4)
+      legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      #
+      dev.off()
+    }
+    #
+    if(T){
+      png('5mCReadPosCorr.png', height = round(2650*1.4), width = 2800, res=300)
+      par(mfrow=c(2,1),mar=c(5,5,3,1))
+      #
+      x1=c(FWD.index[,FWD.sites])
+      if(methyl.type=='B'){
+        y1=c((FWD.Chm+FWD.Cm)[,FWD.sites])
+      }
+      if(methyl.type=='M'){
+        y1=c(FWD.Cm[,FWD.sites])
+      }
+      if(methyl.type=='H'){
+        y1=c(FWD.Chm[,FWD.sites])
+      }
+      #
+      x2=c(FWD.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+      if(methyl.type=='B'){
+        y2=c((FWD.Chm+FWD.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+      }
+      if(methyl.type=='M'){
+        y2=c(FWD.Cm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+      }
+      if(methyl.type=='H'){
+        y2=c(FWD.Chm[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),FWD.sites])
+      }
+      d1=na.omit(data.frame('x'=x1,'y'=y1))
+      d2=na.omit(data.frame('x'=x2,'y'=y2))
+      #
+      plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[1]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
+      contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
+      contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
+      lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
+      lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
+      legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      #
+      #
+      x1=c(REV.index[,REV.sites])
+      if(methyl.type=='B'){
+        y1=c((REV.Chm+REV.Cm)[,REV.sites])
+      }
+      if(methyl.type=='M'){
+        y1=c(REV.Cm[,REV.sites])
+      }
+      if(methyl.type=='H'){
+        y1=c(REV.Chm[,REV.sites])
+      }
+      #
+      x2=c(REV.index[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+      if(methyl.type=='B'){
+        y2=c((REV.Chm+REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+      }
+      if(methyl.type=='M'){
+        y2=c((REV.Cm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+      }
+      if(methyl.type=='H'){
+        y2=c((REV.Chm)[(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),REV.sites])
+      }
+      d1=na.omit(data.frame('x'=x1,'y'=y1))
+      d2=na.omit(data.frame('x'=x2,'y'=y2))
+      #
+      plot(NULL,NULL,xlim=c(0,max(x1,na.rm = T)),ylim=c(0,1),main = paste0(plot_title,'Methylation Correlation to Read Position: ',plot.nom[2]),cex.axis = 1.4,ylab = paste0('Methyl Score'),cex.lab=1.6,cex.main=1.5,xlab=paste0("Bases from 5' End"))
+      contour(kde2d(d1$x,d1$y),col='black',lwd=1.5,add=T)
+      contour(kde2d(d2$x,d2$y),col='purple',lwd=1,add=T)
+      lines(smooth.spline(d1$x,d1$y,spar = 0.7),col='black',lty='solid',lwd=4)
+      lines(smooth.spline(d2$x,d2$y,spar = 0.7),col='purple',lty='solid',lwd=4)
+      legend('topright',legend = c('Pre-Quality Filtering','Post-Quality Filtering'),col = c('black','purple'),fill=c('black','purple'),bty = 'n',cex=1.5)
+      dev.off()
+    }
   }
   #
   if(pre.ligated){
