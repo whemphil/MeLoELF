@@ -37,6 +37,7 @@ MeLoELF <- function(parent,
                     ins.tol=1,
                     modk.fillC=F,
                     exact.search=F,
+                    fastq.sampler=NULL,
                     align.file='align.RData',
                     processed.file='processed.RData',
                     seq.file='sequences.txt',
@@ -692,7 +693,7 @@ map.fragmentsBS <- function(read,read.length,FWD,REV,FWD.sites,REV.sites) {
           REV.index[indel.id[i],which(!is.na(REV.index[indel.id[i]+1,]))]=REV.index[indel.id[i]+1,which(!is.na(REV.index[indel.id[i]+1,]))]
           REV.Chm[indel.id[i],which(!is.na(REV.Chm[indel.id[i]+1,]))]=REV.Chm[indel.id[i]+1,which(!is.na(REV.Chm[indel.id[i]+1,]))]
           REV.Cm[indel.id[i],which(!is.na(REV.Cm[indel.id[i]+1,]))]=REV.Cm[indel.id[i]+1,which(!is.na(REV.Cm[indel.id[i]+1,]))]
-          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REV)
+          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REVo)
           Q.reads[indel.id[i],2]=sum(REV.align[indel.id[i],]==REVo | REVo=='O')/(diff(range(which(REV.align[indel.id[i],]!='x')))+1)
         }
         if((indels$id[which(indels$indel)])[i]=='FWDc'){
@@ -700,7 +701,7 @@ map.fragmentsBS <- function(read,read.length,FWD,REV,FWD.sites,REV.sites) {
           FWD.index[indel.id[i],which(!is.na(FWD.index[indel.id[i]+1,]))]=FWD.index[indel.id[i]+1,which(!is.na(FWD.index[indel.id[i]+1,]))]
           FWD.Chm[indel.id[i],which(!is.na(FWD.Chm[indel.id[i]+1,]))]=FWD.Chm[indel.id[i]+1,which(!is.na(FWD.Chm[indel.id[i]+1,]))]
           FWD.Cm[indel.id[i],which(!is.na(FWD.Cm[indel.id[i]+1,]))]=FWD.Cm[indel.id[i]+1,which(!is.na(FWD.Cm[indel.id[i]+1,]))]
-          Q.reads[indel.id[i],1]=(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)/length(FWDo)
+          Q.reads[indel.id[i],1]=(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)/length(FWDc)
           Q.reads[indel.id[i],2]=sum(FWD.align[indel.id[i],]==FWDc | FWDc=='O')/(diff(range(which(FWD.align[indel.id[i],]!='x')))+1)
         }
         if((indels$id[which(indels$indel)])[i]=='REVc'){
@@ -708,7 +709,7 @@ map.fragmentsBS <- function(read,read.length,FWD,REV,FWD.sites,REV.sites) {
           REV.index[indel.id[i],which(!is.na(REV.index[indel.id[i]+1,]))]=REV.index[indel.id[i]+1,which(!is.na(REV.index[indel.id[i]+1,]))]
           REV.Chm[indel.id[i],which(!is.na(REV.Chm[indel.id[i]+1,]))]=REV.Chm[indel.id[i]+1,which(!is.na(REV.Chm[indel.id[i]+1,]))]
           REV.Cm[indel.id[i],which(!is.na(REV.Cm[indel.id[i]+1,]))]=REV.Cm[indel.id[i]+1,which(!is.na(REV.Cm[indel.id[i]+1,]))]
-          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REV)
+          Q.reads[indel.id[i],1]=(diff(range(which(REV.align[indel.id[i],]!='x')))+1)/length(REVc)
           Q.reads[indel.id[i],2]=sum(REV.align[indel.id[i],]==REVc | REVc=='O')/(diff(range(which(REV.align[indel.id[i],]!='x')))+1)
         }
       }
@@ -874,8 +875,8 @@ map.fragmentsBS <- function(read,read.length,FWD,REV,FWD.sites,REV.sites) {
     
     # save relevant data from read to subset of stable variable
     DATA=list('FWD.align'=FWD.align,'REV.align'=REV.align,'FWD.Chm'=FWD.Chm,'FWD.Cm'=FWD.Cm,'REV.Chm'=REV.Chm,'REV.Cm'=REV.Cm,'Q'=as.matrix(Q),'FWD.I'=FWD.I,'REV.I'=REV.I)
-    if((sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1)){
-      DATA=indel.fix(DATA,FWD,REV)
+    if((sum(DATA$Q[,3]=='FWD',na.rm = T)>1 | sum(DATA$Q[,3]=='REV',na.rm = T)>1 | sum(DATA$Q[,3]=='FWDc',na.rm = T)>1 | sum(DATA$Q[,3]=='REVc',na.rm = T)>1)){
+      DATA=indel.fixBS(DATA,FWDo,REVo,FWDc,REVc)
     }
     
   }
@@ -1472,6 +1473,9 @@ if(crunch.too){
   if(used.fastq){
     pre.q=fread(sam.file,header = F,sep = '\t')
     pre.q=pre.q[seq(2,nrow(pre.q),4),1]
+    if(!is.null(fastq.sampler)){
+      pre.q=pre.q[sample(1:length(pre.q),fastq.sampler)]
+    }
     fwrite(x = as.list(pre.q),file = 'FASTQseq.dat',sep = '\n',col.names = F,quote = F)
     rm(pre.q)
     show('...file adaptation complete!')
@@ -1502,6 +1506,9 @@ if(crunch.too){
     raw.3=read.csv(meca.file,header = F,sep = ";") # load methyl and hydroxy-methyl scores from pre-processed file
   }
   if(used.BSdata){
+    if(!used.fastq){
+      show('WARNING: Loaded sequence data from pre-processed DAT file...the fastq.sampler parameter will be ignored.')
+    }
     raw=read.csv(file = sam.file,header = F,sep = ',') # load sequences from pre-processed file
   }
   
@@ -2034,6 +2041,10 @@ if(process){
       SeqFrac.Ro=sum(Q.reads[,3]=='REV',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
       SeqFrac.Fc=sum(Q.reads[,3]=='FWDc',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
       SeqFrac.Rc=sum(Q.reads[,3]=='REVc',na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc'),na.rm = T)
+      SeqFracQ.Fo=sum(Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc') & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)
+      SeqFracQ.Ro=sum(Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc') & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)
+      SeqFracQ.Fc=sum(Q.reads[,3]=='FWDc' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc') & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)
+      SeqFracQ.Rc=sum(Q.reads[,3]=='REVc' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)/sum(Q.reads[,3] %in% c('FWD','REV','FWDc','REVc') & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,na.rm = T)
     }
     fNA.fwd=colSums(is.na(fwd.binary))/nrow(fwd.binary)
     fNA.rev=colSums(is.na(rev.binary))/nrow(rev.binary)
@@ -2117,7 +2128,8 @@ if(process){
     if(!used.BSdata){
       text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('[',round(100*filt.modk),'/',round(100*all.modk),'%]  ',round(100*used.modk),'% 5(h)mC'),col='grey',cex=1.3)
     }else{
-      text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('Orig. F/R = ',round(100*SeqFrac.Fo),'/',round(100*SeqFrac.Ro),'% (',round(100*SeqFrac.Fc),'/',round(100*SeqFrac.Rc),'%)'),col='grey',cex=1.3)
+      text(x=2*length(FWD.sites),y=1.07,pos=4,labels=paste0('Map. F/R = ',round(100*SeqFrac.Fo),'/',round(100*SeqFrac.Ro),'% (',round(100*SeqFrac.Fc),'/',round(100*SeqFrac.Rc),'%)'),col='grey',cex=1.3)
+      text(x=2*length(FWD.sites),y=1.0,pos=4,labels=paste0('Filt. F/R = ',round(100*SeqFracQ.Fo),'/',round(100*SeqFracQ.Ro),'% (',round(100*SeqFracQ.Fc),'/',round(100*SeqFracQ.Rc),'%)'),col='grey',cex=1.3)
     }
     #
     dev.off()

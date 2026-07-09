@@ -27,6 +27,7 @@ MeLoELF(parent,
         ins.tol=1,
         modk.fillC=F,
         exact.search=F,
+        fastq.sampler=NULL,
         align.file='align.RData',
         processed.file='processed.RData',
         seq.file='sequences.txt',
@@ -67,6 +68,7 @@ Defaults:
 \item{ins.tol}{An integer giving the maximum number of base insertions at a site to tolerate when re-stitching fragments during fix.indel=T procedures; DEFAULT -- 1.}
 \item{modk.fillC}{A logical indicating whether, both during methyl score assignment and during Modkit summary-like statistic calculations in MethylScoring output, non-indexed Cs in read sequences should be filled with zero methyl score values instead of only using ML:B:C values in the parent SAM file (see Details for suggestions); DEFAULT -- F.}
 \item{exact.search}{A logical indicating whether the default fragment mapping/alignment should be replaced with a faster, simpler motif search. Alternatively, an integer that specifies the kmer size for a balanced kmer-mapping algorithm (see Details before changing default); DEFAULT -- F.}
+\item{fastq.sampler}{A single integer specifying the number of reads to subset/sample from the parent FASTQ file if bisulfite/EMseq data is being processed and a pre-processed DAT file is not used; DEFAULT -- no sampling.}
 \item{align.file}{A single character string indicating the name of the RData file to export mapping data to if crunch.too==T, or to import mapping data from if crunch.too==F and process==T; DEFAULT -- 'align.RData'.}
 \item{processed.file}{A single character string indicating the name of the Rdata file to export processed data to if process==T; DEFAULT -- 'processed.RData'.}
 \item{seq.file}{A single character string indicating the filename for the exported TXT file containing the Nanopore read sequences; DEFAULT -- 'sequences.txt'.}
