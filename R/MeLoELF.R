@@ -1366,7 +1366,7 @@ get.proc2 <- function(dat,mdl=proc.mdl){
         m.counts.tab=table(rowSums(m.counts))
         data.dist=rep(0,times=k+1)
         data.dist[as.numeric(names(m.counts.tab))+1]=m.counts.tab/sim.n
-        return(sum((1+abs(data.dist-n.dist2))^2))
+        return(sum((abs(data.dist-n.dist2))^2))
       }
     }
     
@@ -1396,6 +1396,7 @@ get.proc2 <- function(dat,mdl=proc.mdl){
     fit=fit3
   }
   advantage=(sqrt(fitCTRLres/(k+1))-sqrt(fit$value/(k+1)))*100
+  dBIC=((k+1)*log(fitCTRLres/(k+1))+1*log((k+1)))-((k+1)*log(fit$value/(k+1))+3*log((k+1)))
   sim.dat=sim.dist2(par = fit$par,sim.n = nrow(dat),otpt = 2)
   if(advantage<=5){
     return(list('proc'=NA,'type1err'=site.meth,'sim'=sim.dat,'procS'=c(fit1$par[1],fit2$par[1],fit3$par[1]),'type1errS'=c(fit1$par[2],fit2$par[2],fit3$par[2]),'procM'=fit$par[1],'type1errM'=fit$par[2]))
@@ -1777,48 +1778,64 @@ if(process){
   REV.Cm=REV.Cm[-junk,]
 
   # calculate some QC
-  FragPos.fwd=pos.score(FWD.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
-  FragPos.rev=pos.score(REV.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
-  FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
-  FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
+  if(!used.BSdata){
+    FragPos.fwd=pos.score(FWD.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['FWD']]));colnames(FragPos.fwd)<-c('rloc','edge','5p','3p','mid')
+    FragPos.rev=pos.score(REV.index,DATA[['RLs']][as.numeric(Q.reads[,4])],length(DATA[['REV']]));colnames(FragPos.rev)<-c('rloc','edge','5p','3p','mid')
+    FragPos.fwdQ=FragPos.fwd[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='FWD'),]
+    FragPos.revQ=FragPos.rev[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching & Q.reads[,3]=='REV'),]
+  }
   #
   pMAP=sum(mapped.frac*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac)])
   pMAP2=sum(mapped.frac2*DATA[['RLs']],na.rm = T)/sum(DATA[['RLs']][!is.na(mapped.frac2)])
   pMAP0=sum(DATA[['RLs']][DATA[['RLs']]>=read.length[1] & DATA[['RLs']]<=read.length[2]])/sum(DATA[['RLs']])
   #
-  FWD.mat=matrix(DATA[['FWD']],nrow = nrow(FWD.align),ncol = ncol(FWD.align),byrow = T)
-  REV.mat=matrix(DATA[['REV']],nrow = nrow(REV.align),ncol = ncol(REV.align),byrow = T)
-  FWD.good=colMeans(FWD.align[Q.reads[,3]=='FWD',]==FWD.mat[Q.reads[,3]=='FWD',],na.rm = T)
-  FWD.miss=colMeans(FWD.align[Q.reads[,3]=='FWD',]=='x',na.rm = T)
-  FWD.err=colMeans(FWD.align[Q.reads[,3]=='FWD',]!=FWD.mat[Q.reads[,3]=='FWD',] & FWD.align[Q.reads[,3]=='FWD',] %in% c('A','C','G','T','N'),na.rm = T)
-  REV.good=colMeans(REV.align[Q.reads[,3]=='REV',]==REV.mat[Q.reads[,3]=='REV',],na.rm = T)
-  REV.miss=colMeans(REV.align[Q.reads[,3]=='REV',]=='x',na.rm = T)
-  REV.err=colMeans(REV.align[Q.reads[,3]=='REV',]!=REV.mat[Q.reads[,3]=='REV',] & REV.align[Q.reads[,3]=='REV',] %in% c('A','C','G','T','N'),na.rm = T)
-  rm(FWD.mat,REV.mat)
-  #
-  FRprop=matrix(table(data.frame(Q.reads[,3],as.numeric(Q.reads[,4]))),nrow = 2)
-  FRskew=(FRprop[1,]-FRprop[2,])/colSums(FRprop)
-  FRpropQ=matrix(table(data.frame(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),3],as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))),nrow = 2)
-  FRskewQ=(FRpropQ[1,]-FRpropQ[2,])/colSums(FRpropQ)
-  #
-  if(methyl.type=='B'){
-    Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)
-    MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+  if(used.BSdata){
+    FWDo=DATA[['FWD']];FWDo[DATA[['FWD']]=='C']='T';FWDo[FWD.sites]='O'
+    REVo=DATA[['REV']];REVo[DATA[['REV']]=='C']='T';REVo[REV.sites]='O'
+    FWD.good=colMeans(t(t(FWD.align[Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,])==FWDo | FWDo=='O') & FWD.align[Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,]!='x',na.rm = T)
+    FWD.miss=colMeans(FWD.align[Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,]=='x',na.rm = T)
+    FWD.err=colMeans(t(t(FWD.align[Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,])!=FWDo) & FWD.align[Q.reads[,3]=='FWD' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,] %in% c('A','C','G','T','N'),na.rm = T)
+    REV.good=colMeans(t(t(REV.align[Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,])==REVo | REVo=='O') & REV.align[Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,]!='x',na.rm = T)
+    REV.miss=colMeans(REV.align[Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,]=='x',na.rm = T)
+    REV.err=colMeans(t(t(REV.align[Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,])!=REVo) & REV.align[Q.reads[,3]=='REV' & Q.reads[,1]>=completeness & Q.reads[,2]>=matching,] %in% c('A','C','G','T','N'),na.rm = T)
+    FWD.good[FWD.sites]=NA; FWD.err[FWD.sites]=NA
+    REV.good[REV.sites]=NA; REV.err[REV.sites]=NA
   }
-  if(methyl.type=='M'){
-    Mscore=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)
-    MscoreQ=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+  if(!used.BSdata){
+    FWD.mat=matrix(DATA[['FWD']],nrow = nrow(FWD.align),ncol = ncol(FWD.align),byrow = T)
+    REV.mat=matrix(DATA[['REV']],nrow = nrow(REV.align),ncol = ncol(REV.align),byrow = T)
+    FWD.good=colMeans(FWD.align[Q.reads[,3]=='FWD',]==FWD.mat[Q.reads[,3]=='FWD',],na.rm = T)
+    FWD.miss=colMeans(FWD.align[Q.reads[,3]=='FWD',]=='x',na.rm = T)
+    FWD.err=colMeans(FWD.align[Q.reads[,3]=='FWD',]!=FWD.mat[Q.reads[,3]=='FWD',] & FWD.align[Q.reads[,3]=='FWD',] %in% c('A','C','G','T','N'),na.rm = T)
+    REV.good=colMeans(REV.align[Q.reads[,3]=='REV',]==REV.mat[Q.reads[,3]=='REV',],na.rm = T)
+    REV.miss=colMeans(REV.align[Q.reads[,3]=='REV',]=='x',na.rm = T)
+    REV.err=colMeans(REV.align[Q.reads[,3]=='REV',]!=REV.mat[Q.reads[,3]=='REV',] & REV.align[Q.reads[,3]=='REV',] %in% c('A','C','G','T','N'),na.rm = T)
+    rm(FWD.mat,REV.mat)
+    #
+    FRprop=matrix(table(data.frame(Q.reads[,3],as.numeric(Q.reads[,4]))),nrow = 2)
+    FRskew=(FRprop[1,]-FRprop[2,])/colSums(FRprop)
+    FRpropQ=matrix(table(data.frame(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),3],as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))),nrow = 2)
+    FRskewQ=(FRpropQ[1,]-FRpropQ[2,])/colSums(FRpropQ)
+    #
+    if(methyl.type=='B'){
+      Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)
+      MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites]+FWD.Cm[,FWD.sites],REV.Chm[,REV.sites]+REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+    }
+    if(methyl.type=='M'){
+      Mscore=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)
+      MscoreQ=rowMeans(cbind(FWD.Cm[,FWD.sites],REV.Cm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+    }
+    if(methyl.type=='H'){
+      Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)
+      MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
+    }
+    Mframe=data.frame('S'=Mscore,'N'=as.numeric(Q.reads[,4]))
+    MskewZ=aggregate(S ~ N,Mframe,mean)
+    Mskew=MskewZ$S
+    MframeQ=data.frame('S'=MscoreQ,'N'=as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))
+    MskewZQ=aggregate(S ~ N,MframeQ,mean)
+    MskewQ=MskewZQ$S
   }
-  if(methyl.type=='H'){
-    Mscore=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)
-    MscoreQ=rowMeans(cbind(FWD.Chm[,FWD.sites],REV.Chm[,REV.sites]),na.rm = T)[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching)]
-  }
-  Mframe=data.frame('S'=Mscore,'N'=as.numeric(Q.reads[,4]))
-  MskewZ=aggregate(S ~ N,Mframe,mean)
-  Mskew=MskewZ$S
-  MframeQ=data.frame('S'=MscoreQ,'N'=as.numeric(Q.reads[which(Q.reads[,1]>=completeness & Q.reads[,2]>=matching),4]))
-  MskewZQ=aggregate(S ~ N,MframeQ,mean)
-  MskewQ=MskewZQ$S
 
   if(pre.ligated){
 
@@ -2170,33 +2187,40 @@ if(process){
     lines(pdf.make(FragPos.revQ[,f]),col='red')
     #
     dev.off()
+  }
+  #
+  if(!(exact.search==T)){
+    png('FragSeq.png', height = round(2650*0.7), width = 2800, res=300)
+    par(mfrow=c(1,1),mar=c(6,3,3,1))
     #
-    if(!(exact.search==T)){
-      png('FragSeq.png', height = round(2650*0.7), width = 2800, res=300)
-      par(mfrow=c(1,1),mar=c(6,3,3,1))
-      #
+    if(!used.BSdata){
       plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(DATA[['FWD']])+1),main = paste0(plot_title,'Substrate Sequencing Accuracy'),cex.axis = 1.3,ylab = '',yaxt='n',cex.lab=1.3,cex.main=2,xaxt='n',xlab='')
-      abline(v=FWD.sites+1/2,lty='dotted',col='grey',lwd=2)
-      lines(FWD.good,col='blue',lty='solid',lwd=5)
-      lines(FWD.err,col='blue',lty='solid',lwd=5)
-      lines(FWD.miss,col='blue',lty='solid',lwd=5)
-      lines(rev(REV.good),col='red',lty='solid',lwd=5)
-      lines(rev(REV.err),col='red',lty='solid',lwd=5)
-      lines(rev(REV.miss),col='red',lty='solid',lwd=5)
-      lines(FWD.good,col='grey',lty='solid',lwd=1.5)
-      lines(FWD.err,col='black',lty='solid',lwd=1.5)
-      lines(FWD.miss,col='white',lty='solid',lwd=1.5)
-      lines(rev(REV.good),col='grey',lty='solid',lwd=1.5)
-      lines(rev(REV.err),col='black',lty='solid',lwd=1.5)
-      lines(rev(REV.miss),col='white',lty='solid',lwd=1.5)
-      legend('topright',legend = c(plot.nom,'Correct','Miscall','Deletion'),col = c('blue','red','grey','black','white'),fill=c('blue','red','grey','black','white'),bty = 'n',cex=1)
-      axis(side = 2,line = 0,at = c(0,0.25,0.5,3/4,1),labels = c('0%','25%','50%','75%','100%'),tick = T,cex.axis=1.3,col.axis = 'black')
-      axis(side = 1,at = c(0:(length(DATA[['FWD']])+1)),labels = c("5'",DATA[['FWD']],"3'"),cex.axis=0.7,col.axis = 'blue')
-      axis(side = 1,line = 1,at = c(0:(length(DATA[['REV']])+1)),labels = rev(c("5'",DATA[['REV']],"3'")),tick = F,cex.axis=0.7,col.axis = 'red')
-      #
-      dev.off()
     }
+    if(used.BSdata){
+      plot(NULL,NULL,ylim=c(0,1),xlim=c(0,length(DATA[['FWD']])+1),main = paste0(plot_title,'Map. Frag. Sequence Accuracy'),cex.axis = 1.3,ylab = '',yaxt='n',cex.lab=1.3,cex.main=2,xaxt='n',xlab='')
+    }
+    abline(v=FWD.sites+1/2,lty='dotted',col='grey',lwd=2)
+    lines(FWD.good,col='blue',lty='solid',lwd=5)
+    lines(FWD.err,col='blue',lty='solid',lwd=5)
+    lines(FWD.miss,col='blue',lty='solid',lwd=5)
+    lines(rev(REV.good),col='red',lty='solid',lwd=5)
+    lines(rev(REV.err),col='red',lty='solid',lwd=5)
+    lines(rev(REV.miss),col='red',lty='solid',lwd=5)
+    lines(FWD.good,col='grey',lty='solid',lwd=1.5)
+    lines(FWD.err,col='black',lty='solid',lwd=1.5)
+    lines(FWD.miss,col='white',lty='solid',lwd=1.5)
+    lines(rev(REV.good),col='grey',lty='solid',lwd=1.5)
+    lines(rev(REV.err),col='black',lty='solid',lwd=1.5)
+    lines(rev(REV.miss),col='white',lty='solid',lwd=1.5)
+    legend('topright',legend = c(plot.nom,'Correct','Miscall','Deletion'),col = c('blue','red','grey','black','white'),fill=c('blue','red','grey','black','white'),bty = 'n',cex=1)
+    axis(side = 2,line = 0,at = c(0,0.25,0.5,3/4,1),labels = c('0%','25%','50%','75%','100%'),tick = T,cex.axis=1.3,col.axis = 'black')
+    axis(side = 1,at = c(0:(length(DATA[['FWD']])+1)),labels = c("5'",DATA[['FWD']],"3'"),cex.axis=0.7,col.axis = 'blue')
+    axis(side = 1,line = 1,at = c(0:(length(DATA[['REV']])+1)),labels = rev(c("5'",DATA[['REV']],"3'")),tick = F,cex.axis=0.7,col.axis = 'red')
     #
+    dev.off()
+  }
+  #
+  if(!used.BSdata){
     if(T){
       png('FwdRevReadBias.png', height = round(2650*0.8), width = 2800, res=300)
       par(mfrow=c(1,1),mar=c(5,5,3,1))
